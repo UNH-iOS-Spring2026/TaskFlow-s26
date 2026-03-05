@@ -1,24 +1,23 @@
-//
-//  ContentView.swift
-//  Task_Flow
-//
-//  Created by Aravind Ganipisetty on 2/11/26.
-//
-
 import SwiftUI
+import WebKit
 
-struct ContentView: View {
-    var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
+struct WebView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> WKWebView {
+        let web = WKWebView()
+        web.allowsBackForwardNavigationGestures = true
+        return web
+    }
+
+    func updateUIView(_ uiView: WKWebView, context: Context) {
+        uiView.load(URLRequest(url: url))
     }
 }
 
-#Preview {
-    ContentView()
+struct ContentView: View {
+    var body: some View {
+        WebView(url: URL(string: "https://taskflow-productivity.netlify.app/")!)
+            .ignoresSafeArea()
+    }
 }
