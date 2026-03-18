@@ -23,6 +23,8 @@ struct WorkHoursView: View {
     @State private var exType: ExpenseType = .food
     @State private var exWhere: String = ""
     @State private var exAmount: String = ""
+    
+    
 
     private let monthNames = Calendar.current.monthSymbols
     private let sessionsKey = "taskflow_work_sessions_v1"
