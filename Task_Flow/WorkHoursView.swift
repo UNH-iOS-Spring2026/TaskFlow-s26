@@ -34,6 +34,7 @@ struct WorkHoursView: View {
         NavigationStack {
             ZStack {
                 background
+                
 
                 ScrollView {
                     VStack(spacing: 18) {
