@@ -4,7 +4,6 @@ import LocalAuthentication
 struct SettingsView: View {
     @EnvironmentObject var auth: AuthStore
 
-    // Persist settings locally
     @AppStorage("tf_dark_mode") private var darkMode = false
     @AppStorage("tf_biometric_enabled") private var biometricEnabled = true
 
@@ -30,7 +29,6 @@ struct SettingsView: View {
                 }
             }
             .navigationBarHidden(true)
-            .preferredColorScheme(darkMode ? .dark : .dark) // keep your dark UI look
             .sheet(isPresented: $showAccountInfo) {
                 AccountInfoSheet(email: auth.currentEmail ?? "—")
             }
@@ -45,18 +43,30 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - UI
-
     private var background: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.06, green: 0.07, blue: 0.12),
-                Color(red: 0.10, green: 0.10, blue: 0.18),
-                Color.black
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        Group {
+            if darkMode {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.06, green: 0.07, blue: 0.12),
+                        Color(red: 0.10, green: 0.10, blue: 0.18),
+                        Color.black
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            } else {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.94, green: 0.96, blue: 1.00),
+                        Color.white,
+                        Color(red: 0.90, green: 0.93, blue: 0.98)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+        }
         .ignoresSafeArea()
     }
 
@@ -64,11 +74,11 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Settings")
                 .font(.system(size: 34, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(darkMode ? AnyShapeStyle(.white) : AnyShapeStyle(.black))
 
             Text("Manage app preferences and account")
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(darkMode ? AnyShapeStyle(.white.opacity(0.7)) : AnyShapeStyle(.black.opacity(0.6)))
         }
         .padding(.top, 6)
     }
@@ -77,14 +87,14 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Preferences")
                 .font(.headline.weight(.bold))
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(primaryTextStyle)
 
             Toggle(isOn: $darkMode) {
                 HStack(spacing: 10) {
                     Image(systemName: "moon.fill")
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(primaryTextStyle)
                     Text("Dark Mode")
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(primaryTextStyle)
                 }
             }
             .tint(Color.purple.opacity(0.9))
@@ -92,9 +102,9 @@ struct SettingsView: View {
             Toggle(isOn: biometricToggleBinding) {
                 HStack(spacing: 10) {
                     Image(systemName: "faceid")
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(primaryTextStyle)
                     Text("Biometric Login")
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(primaryTextStyle)
                 }
             }
             .tint(Color.purple.opacity(0.9))
@@ -102,15 +112,15 @@ struct SettingsView: View {
             if !deviceSupportsBiometrics {
                 Text("Biometrics not available on this device/simulator.")
                     .font(.caption)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(secondaryTextStyle)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.06))
+        .background(cardFill)
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                .stroke(cardBorder, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
@@ -119,20 +129,21 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Account")
                 .font(.headline.weight(.bold))
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(primaryTextStyle)
 
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Signed in as")
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.65))
+                        .foregroundStyle(secondaryTextStyle)
 
                     Text(auth.currentEmail ?? "—")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(primaryTextStyle)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+
                 Spacer()
 
                 Button {
@@ -142,16 +153,16 @@ struct SettingsView: View {
                         .font(.subheadline.weight(.semibold))
                 }
                 .buttonStyle(.bordered)
-                .tint(Color.white.opacity(0.12))
-                .foregroundStyle(.white.opacity(0.92))
+                .tint(darkMode ? Color.white.opacity(0.12) : Color.black.opacity(0.06))
+                .foregroundStyle(darkMode ? .white : .black)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.06))
+        .background(cardFill)
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                .stroke(cardBorder, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
@@ -174,19 +185,33 @@ struct SettingsView: View {
 
             Text("Logging out will return you to the login screen.")
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(secondaryTextStyle)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.06))
+        .background(cardFill)
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                .stroke(cardBorder, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
-    // MARK: - Biometrics helpers
+    private var primaryTextStyle: AnyShapeStyle {
+        darkMode ? AnyShapeStyle(.white.opacity(0.92)) : AnyShapeStyle(.black.opacity(0.90))
+    }
+
+    private var secondaryTextStyle: AnyShapeStyle {
+        darkMode ? AnyShapeStyle(.white.opacity(0.60)) : AnyShapeStyle(.black.opacity(0.55))
+    }
+
+    private var cardFill: Color {
+        darkMode ? Color.white.opacity(0.06) : Color.white.opacity(0.82)
+    }
+
+    private var cardBorder: Color {
+        darkMode ? Color.white.opacity(0.10) : Color.black.opacity(0.08)
+    }
 
     private var deviceSupportsBiometrics: Bool {
         let ctx = LAContext()
@@ -198,7 +223,6 @@ struct SettingsView: View {
         Binding(
             get: { biometricEnabled },
             set: { newValue in
-                // If device can't do biometrics, don't let user enable it.
                 if newValue && !deviceSupportsBiometrics {
                     biometricEnabled = false
                 } else {
@@ -208,8 +232,6 @@ struct SettingsView: View {
         )
     }
 }
-
-// MARK: - Account Info Sheet
 
 private struct AccountInfoSheet: View {
     @Environment(\.dismiss) private var dismiss
