@@ -1,10 +1,6 @@
 //
 //  GoalsView.swift
 //  Task_Flow
-//
-//  Created by Aravind Ganipisetty on 2/11/26.
-//
-
 import SwiftUI
 
 struct GoalRecord: Identifiable, Codable {
@@ -143,63 +139,6 @@ struct GoalsView: View {
                 Button("OK", role: .cancel) { }
             }
         }
-    }
-
-    private func saveGoal() {
-        let trimmedName = goalName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedDescription = goalDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !trimmedName.isEmpty else {
-            showValidationAlert = true
-            return
-        }
-
-        let newGoal = GoalRecord(
-            goalName: trimmedName,
-            goalDescription: trimmedDescription,
-            targetDate: targetDate
-        )
-
-        goals.append(newGoal)
-        saveGoalsToStorage()
-        clearForm()
-    }
-
-    private func clearForm() {
-        goalName = ""
-        goalDescription = ""
-        targetDate = Date()
-    }
-
-    private func deleteGoal(_ goal: GoalRecord) {
-        goals.removeAll { $0.id == goal.id }
-        saveGoalsToStorage()
-    }
-
-    private func saveGoalsToStorage() {
-        do {
-            let data = try JSONEncoder().encode(goals)
-            UserDefaults.standard.set(data, forKey: storageKey)
-        } catch {
-            print("Failed to save goals: \(error.localizedDescription)")
-        }
-    }
-
-    private func loadGoals() {
-        guard let data = UserDefaults.standard.data(forKey: storageKey) else { return }
-
-        do {
-            goals = try JSONDecoder().decode([GoalRecord].self, from: data)
-        } catch {
-            print("Failed to load goals: \(error.localizedDescription)")
-        }
-    }
-
-    private func formattedDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
     }
 }
 
