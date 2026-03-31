@@ -23,6 +23,8 @@ struct GoalRecord: Identifiable, Codable, Equatable {
 }
 
 struct GoalsView: View {
+    @AppStorage("tf_dark_mode") private var darkMode = false
+
     @State private var goalName: String = ""
     @State private var goalDescription: String = ""
     @State private var targetDate: Date = Date()
@@ -34,35 +36,45 @@ struct GoalsView: View {
     private let storageKey = "saved_goals_records"
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 18) {
-                createGoalSection
+        NavigationStack {
+            ZStack {
+                backgroundView
+                    .ignoresSafeArea()
 
-                if goals.isEmpty {
-                    Spacer()
-                    Text("No goals saved yet")
-                        .foregroundColor(.gray)
-                    Spacer()
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(goals) { goal in
-                                goalCard(goal)
+                VStack(spacing: 18) {
+                    createGoalSection
+
+                    if goals.isEmpty {
+                        Spacer()
+                        Text("No goals saved yet")
+                            .foregroundColor(secondaryTextColor)
+                        Spacer()
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 12) {
+                                ForEach(goals) { goal in
+                                    goalCard(goal)
+                                }
                             }
+                            .padding(.horizontal)
+                            .padding(.bottom, 12)
                         }
-                        .padding(.horizontal)
-                        .padding(.bottom, 12)
                     }
                 }
+                .padding(.top, 8)
             }
             .navigationTitle("Goals")
-            .onAppear(perform: loadGoals)
+            .navigationBarTitleDisplayMode(.large)
+            .onAppear {
+                loadGoals()
+            }
             .alert("Please enter a goal name", isPresented: $showValidationAlert) {
                 Button("OK", role: .cancel) { }
             }
             .sheet(item: $selectedGoal) { goal in
                 GoalDetailSheet(
                     goal: goal,
+                    darkMode: darkMode,
                     onSave: { updatedGoal in
                         updateGoal(updatedGoal)
                     },
@@ -74,32 +86,68 @@ struct GoalsView: View {
         }
     }
 
+    private var backgroundView: some View {
+        Group {
+            if darkMode {
+                LinearGradient(
+                    colors: [
+                        Color.black,
+                        Color(red: 0.03, green: 0.05, blue: 0.16),
+                        Color.black
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            } else {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.95, green: 0.97, blue: 1.0),
+                        Color.white,
+                        Color(red: 0.92, green: 0.95, blue: 0.99)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+        }
+    }
+
     private var createGoalSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Create Goal")
                 .font(.title2)
                 .fontWeight(.bold)
+                .foregroundColor(primaryTextColor)
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Goal Name")
                     .font(.headline)
+                    .foregroundColor(primaryTextColor)
 
                 TextField("Enter goal name", text: $goalName)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding(12)
+                    .background(fieldBackgroundColor)
+                    .foregroundColor(primaryTextColor)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Description")
                     .font(.headline)
+                    .foregroundColor(primaryTextColor)
 
                 TextField("Enter description", text: $goalDescription, axis: .vertical)
                     .lineLimit(3...5)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .padding(12)
+                    .background(fieldBackgroundColor)
+                    .foregroundColor(primaryTextColor)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Target Date & Time")
                     .font(.headline)
+                    .foregroundColor(primaryTextColor)
 
                 DatePicker(
                     "Select Date & Time",
@@ -107,6 +155,8 @@ struct GoalsView: View {
                     displayedComponents: [.date, .hourAndMinute]
                 )
                 .datePickerStyle(.compact)
+                .colorScheme(darkMode ? .dark : .light)
+                .foregroundColor(primaryTextColor)
             }
 
             HStack(spacing: 12) {
@@ -116,22 +166,26 @@ struct GoalsView: View {
                         .padding()
                         .background(Color.purple)
                         .foregroundColor(.white)
-                        .cornerRadius(10)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
 
                 Button(action: clearForm) {
                     Text("Cancel")
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.gray.opacity(0.2))
-                        .foregroundColor(.black)
-                        .cornerRadius(10)
+                        .background(buttonSecondaryBackground)
+                        .foregroundColor(primaryTextColor)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
             }
         }
         .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(14)
+        .background(cardBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(cardBorder, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .padding(.horizontal)
     }
 
@@ -141,12 +195,12 @@ struct GoalsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(goal.goalName)
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(primaryTextColor)
 
                     if !goal.goalDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(goal.goalDescription)
                             .font(.subheadline)
-                            .foregroundColor(.gray)
+                            .foregroundColor(secondaryTextColor)
                             .lineLimit(2)
                     }
                 }
@@ -159,7 +213,7 @@ struct GoalsView: View {
                     Image(systemName: "trash")
                         .foregroundColor(.red)
                         .padding(8)
-                        .background(Color.white.opacity(0.08))
+                        .background(Color.red.opacity(darkMode ? 0.12 : 0.08))
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -171,12 +225,40 @@ struct GoalsView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground).opacity(0.35))
-        .cornerRadius(14)
+        .background(cardBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(cardBorder, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .contentShape(Rectangle())
         .onTapGesture {
             selectedGoal = goal
         }
+    }
+
+    private var primaryTextColor: Color {
+        darkMode ? .white : .black
+    }
+
+    private var secondaryTextColor: Color {
+        darkMode ? Color.white.opacity(0.7) : Color.black.opacity(0.6)
+    }
+
+    private var cardBackground: Color {
+        darkMode ? Color.white.opacity(0.08) : Color.white.opacity(0.9)
+    }
+
+    private var cardBorder: Color {
+        darkMode ? Color.white.opacity(0.08) : Color.black.opacity(0.06)
+    }
+
+    private var fieldBackgroundColor: Color {
+        darkMode ? Color.white.opacity(0.08) : Color.black.opacity(0.04)
+    }
+
+    private var buttonSecondaryBackground: Color {
+        darkMode ? Color.white.opacity(0.12) : Color.black.opacity(0.06)
     }
 
     private func saveGoal() {
@@ -252,23 +334,26 @@ struct GoalDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var editableGoal: GoalRecord
+    let darkMode: Bool
     let onSave: (GoalRecord) -> Void
     let onDelete: (GoalRecord) -> Void
 
     init(
         goal: GoalRecord,
+        darkMode: Bool,
         onSave: @escaping (GoalRecord) -> Void,
         onDelete: @escaping (GoalRecord) -> Void
     ) {
         _editableGoal = State(initialValue: goal)
+        self.darkMode = darkMode
         self.onSave = onSave
         self.onDelete = onDelete
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
-                Section(header: Text("Goal Information")) {
+                Section("Goal Information") {
                     TextField("Goal Name", text: $editableGoal.goalName)
 
                     TextField("Description", text: $editableGoal.goalDescription, axis: .vertical)
@@ -302,8 +387,9 @@ struct GoalDetailSheet: View {
             }
             .navigationTitle("Goal Details")
             .navigationBarTitleDisplayMode(.inline)
+            .preferredColorScheme(darkMode ? .dark : .light)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button("Close") {
                         dismiss()
                     }
@@ -315,5 +401,4 @@ struct GoalDetailSheet: View {
 
 #Preview {
     GoalsView()
-        .preferredColorScheme(.dark)
 }
