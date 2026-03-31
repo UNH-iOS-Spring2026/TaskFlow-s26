@@ -1,6 +1,3 @@
-//
-//  GoalsView.swift
-//  Task_Flow
 import SwiftUI
 
 struct GoalRecord: Identifiable, Codable, Equatable {
