@@ -52,12 +52,14 @@ struct HabitsView: View {
         store.habits[i].lastCompleted = Date()
         store.saveAll()
     }
+    
 
     private func deleteHabits(at offsets: IndexSet) {
         let ids = offsets.map { sortedHabits[$0].id }
         store.habits.removeAll { ids.contains($0.id) }
         store.saveAll()
     }
+    
 }
 
 struct AddHabitSheet: View {
