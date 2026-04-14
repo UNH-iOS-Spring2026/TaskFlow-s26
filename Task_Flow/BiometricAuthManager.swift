@@ -40,38 +40,49 @@ final class BiometricAuthManager: ObservableObject {
     }
 
     func refresh() {
-        let ctx = LAContext()
-        var err: NSError?
-        let ok = ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &err)
+        let context = LAContext()
+        var error: NSError?
+
+        let canEvaluate = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
 
         DispatchQueue.main.async {
-            self.isAvailable = ok
-            if ok {
-                switch ctx.biometryType {
-                case .faceID: self.kind = .faceID
-                case .touchID: self.kind = .touchID
-                default: self.kind = .none
+            self.isAvailable = canEvaluate
+
+            if canEvaluate {
+                switch context.biometryType {
+                case .faceID:
+                    self.kind = .faceID
+                case .touchID:
+                    self.kind = .touchID
+                default:
+                    self.kind = .none
                 }
                 self.lastErrorMessage = nil
             } else {
                 self.kind = .none
-                self.lastErrorMessage = err?.localizedDescription
+                self.lastErrorMessage = error?.localizedDescription
             }
         }
     }
 
     func authenticate(reason: String, completion: @escaping (Bool, String?) -> Void) {
-        let ctx = LAContext()
-        ctx.localizedCancelTitle = "Cancel"
+        let context = LAContext()
+        context.localizedCancelTitle = "Cancel"
 
-        var err: NSError?
-        guard ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &err) else {
-            completion(false, err?.localizedDescription ?? "Biometrics not available.")
+        var error: NSError?
+
+        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+            DispatchQueue.main.async {
+                completion(false, error?.localizedDescription ?? "Biometrics not available.")
+            }
             return
         }
 
-        ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { success, error in
-            completion(success, error?.localizedDescription)
+        context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
+                               localizedReason: reason) { success, authError in
+            DispatchQueue.main.async {
+                completion(success, authError?.localizedDescription)
+            }
         }
     }
 }
