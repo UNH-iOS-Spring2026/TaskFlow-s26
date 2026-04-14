@@ -2,8 +2,6 @@
 //  Models.swift
 //  Task_Flow
 //
-//  Created by Aravind Ganipisetty on 2/11/26.
-//
 
 import Foundation
 
@@ -19,7 +17,7 @@ struct NoteItem: Identifiable, Codable, Equatable {
     var title: String
     var body: String
     var createdAt: Date = Date()
-    var colorSeed: Int = Int.random(in: 0...10_000)   // random color per note
+    var colorSeed: Int = Int.random(in: 0...10_000)
 }
 
 struct WorkHourEntry: Identifiable, Codable, Equatable {
@@ -34,7 +32,7 @@ struct GoalItem: Identifiable, Codable, Equatable {
     var id: UUID = UUID()
     var title: String
     var targetDate: Date
-    var progress: Double = 0.0 // 0...1
+    var progress: Double = 0.0
     var createdAt: Date = Date()
 }
 
@@ -44,6 +42,7 @@ struct HabitItem: Identifiable, Codable, Equatable {
     var streak: Int = 0
     var lastCompleted: Date? = nil
     var createdAt: Date = Date()
+    var isCompletedToday: Bool = false
 }
 
 struct ReminderItem: Identifiable, Codable, Equatable {
@@ -53,4 +52,3 @@ struct ReminderItem: Identifiable, Codable, Equatable {
     var isDone: Bool = false
     var createdAt: Date = Date()
 }
-

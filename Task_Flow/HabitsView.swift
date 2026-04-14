@@ -49,7 +49,7 @@ struct HabitsView: View {
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(primaryTextColor)
                             .frame(width: 38, height: 38)
-                            .background(cardBackground)
+                            .backgroundz(cardBackground)
                             .overlay(
                                 Circle()
                                     .stroke(cardBorder, lineWidth: 1)

@@ -2,8 +2,6 @@
 //  NotesView.swift
 //  Task_Flow
 //
-//  Created by Aravind Ganipisetty on 2/11/26.
-//
 
 import SwiftUI
 
@@ -12,7 +10,7 @@ struct NotesView: View {
 
     @State private var showAdd = false
     @State private var searchText = ""
-    @State private var selectedNoteID: UUID? = nil   // ✅ open full note (no Identifiable hacks)
+    @State private var selectedNoteID: UUID? = nil
 
     var body: some View {
         NavigationStack {
@@ -66,7 +64,6 @@ struct NotesView: View {
                 AddNoteSheetModern()
                     .environmentObject(store)
             }
-            // ✅ Full note screen without `.fullScreenCover(item:)` (prevents Identifiable conflict)
             .fullScreenCover(
                 isPresented: Binding(
                     get: { selectedNoteID != nil },
@@ -80,8 +77,6 @@ struct NotesView: View {
             }
         }
     }
-
-    // MARK: - UI
 
     private var background: some View {
         LinearGradient(
@@ -152,8 +147,6 @@ struct NotesView: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
-    // MARK: - Data
-
     private var sortedNotes: [NoteItem] {
         store.notes.sorted(by: { $0.createdAt > $1.createdAt })
     }
@@ -167,10 +160,7 @@ struct NotesView: View {
     }
 
     private func deleteNote(_ note: NoteItem) {
-        withAnimation {
-            store.notes.removeAll { $0.id == note.id }
-            store.saveAll()
-        }
+        store.deleteNote(note)
     }
 }
 
@@ -191,7 +181,6 @@ private struct NoteCard: View {
             onOpen()
         } label: {
             HStack(spacing: 12) {
-                // ✅ SUPER visible color stripe (fixes "colors not working" complaint)
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(c)
                     .frame(width: 10)
@@ -222,7 +211,6 @@ private struct NoteCard: View {
 
                 Spacer()
 
-                // ✅ visible delete button
                 Button {
                     onDelete()
                 } label: {
@@ -241,7 +229,7 @@ private struct NoteCard: View {
             .background(Color.white.opacity(0.06))
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(c.opacity(0.55), lineWidth: 1.4) // ✅ colored border
+                    .stroke(c.opacity(0.55), lineWidth: 1.4)
             )
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
@@ -254,7 +242,7 @@ private struct NoteCard: View {
     }
 }
 
-// MARK: - Add Note (Full Screen)
+// MARK: - Add Note
 
 struct AddNoteSheetModern: View {
     @EnvironmentObject var store: AppStore
@@ -262,16 +250,14 @@ struct AddNoteSheetModern: View {
 
     @State private var title = ""
     @State private var bodyText = ""
-
-    // ✅ Use palette indices (0...5). This guarantees the stored value maps to visible colors.
     @State private var selectedSeed: Int = 2
+
     private let seeds: [Int] = [0, 1, 2, 3, 4, 5]
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-
                     HStack {
                         Text("Create New Note")
                             .font(.title2.weight(.bold))
@@ -323,8 +309,10 @@ struct AddNoteSheetModern: View {
                                 }
                                 .overlay(
                                     Circle()
-                                        .stroke(isSelected ? Color.purple : Color.black.opacity(0.15),
-                                                lineWidth: isSelected ? 3 : 1)
+                                        .stroke(
+                                            isSelected ? Color.purple : Color.black.opacity(0.15),
+                                            lineWidth: isSelected ? 3 : 1
+                                        )
                                 )
                                 .contentShape(Circle())
                                 .onTapGesture {
@@ -333,7 +321,6 @@ struct AddNoteSheetModern: View {
                             }
                         }
 
-                        // ✅ Live preview (helps you verify the color is actually changing)
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .fill(NoteColors.color(for: selectedSeed).opacity(0.28))
                             .frame(height: 46)
@@ -347,21 +334,11 @@ struct AddNoteSheetModern: View {
 
                     HStack(spacing: 12) {
                         Button {
-                            let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                            let b = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
-                            guard !t.isEmpty || !b.isEmpty else { return }
-
-                            store.notes.insert(
-                                NoteItem(
-                                    title: t.isEmpty ? "Untitled" : t,
-                                    body: b,
-                                    createdAt: Date(),
-                                    colorSeed: selectedSeed // ✅ palette index stored
-                                ),
-                                at: 0
-                            )
-                            store.saveAll()
-                            dismiss()
+                            store.addNote(title: title, body: bodyText, colorSeed: selectedSeed) { error in
+                                if error == nil {
+                                    dismiss()
+                                }
+                            }
                         } label: {
                             Text("Create Note")
                                 .font(.headline.weight(.semibold))
@@ -388,7 +365,7 @@ struct AddNoteSheetModern: View {
     }
 }
 
-// MARK: - Note Detail (Open full note + edit + delete)
+// MARK: - Note Detail
 
 struct NoteDetailView: View {
     @EnvironmentObject var store: AppStore
@@ -426,8 +403,6 @@ struct NoteDetailView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
-
-                        // Top bar
                         HStack {
                             Button {
                                 dismiss()
@@ -473,7 +448,6 @@ struct NoteDetailView: View {
                         }
                         .padding(.top, 6)
 
-                        // Header
                         HStack(spacing: 12) {
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
                                 .fill(c)
@@ -533,8 +507,10 @@ struct NoteDetailView: View {
                                         }
                                     }
                                     .overlay(
-                                        Circle().stroke(isSelected ? Color.purple : Color.white.opacity(0.12),
-                                                       lineWidth: isSelected ? 3 : 1)
+                                        Circle().stroke(
+                                            isSelected ? Color.purple : Color.white.opacity(0.12),
+                                            lineWidth: isSelected ? 3 : 1
+                                        )
                                     )
                                     .contentShape(Circle())
                                     .onTapGesture { seed = s }
@@ -543,7 +519,6 @@ struct NoteDetailView: View {
                             .padding(.bottom, 6)
 
                         } else {
-                            // View mode (full text)
                             Text(note.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled" : note.title)
                                 .font(.system(size: 28, weight: .bold))
                                 .foregroundStyle(.white)
@@ -564,7 +539,6 @@ struct NoteDetailView: View {
                     }
                     .padding()
                     .onAppear {
-                        // preload editing fields from current note
                         title = note.title
                         bodyText = note.body
                         seed = note.colorSeed
@@ -584,39 +558,33 @@ struct NoteDetailView: View {
     }
 
     private func saveEdits() {
-        guard let idx = noteIndex else { return }
-        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let b = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        store.notes[idx] = NoteItem(
-            id: store.notes[idx].id,
-            title: t.isEmpty ? "Untitled" : t,
-            body: b,
-            createdAt: store.notes[idx].createdAt,
+        store.updateNote(
+            id: noteID,
+            title: title,
+            body: bodyText,
             colorSeed: seed
         )
-        store.saveAll()
     }
 
     private func deleteThisNote() {
         guard let idx = noteIndex else { return }
-        store.notes.remove(at: idx)
-        store.saveAll()
+        let note = store.notes[idx]
+        store.deleteNote(note)
         dismiss()
     }
 }
 
-// MARK: - Colors (palette)
+// MARK: - Colors
 
 enum NoteColors {
     static func color(for seed: Int) -> Color {
         let palette: [Color] = [
-            Color(red: 0.96, green: 0.90, blue: 0.48), // yellow
-            Color(red: 0.81, green: 0.90, blue: 1.00), // blue
-            Color(red: 0.92, green: 0.84, blue: 1.00), // purple
-            Color(red: 0.82, green: 0.97, blue: 0.87), // green
-            Color(red: 0.92, green: 0.92, blue: 0.92), // gray
-            Color(red: 1.00, green: 0.90, blue: 0.76)  // orange
+            Color(red: 0.96, green: 0.90, blue: 0.48),
+            Color(red: 0.81, green: 0.90, blue: 1.00),
+            Color(red: 0.92, green: 0.84, blue: 1.00),
+            Color(red: 0.82, green: 0.97, blue: 0.87),
+            Color(red: 0.92, green: 0.92, blue: 0.92),
+            Color(red: 1.00, green: 0.90, blue: 0.76)
         ]
         return palette[abs(seed) % palette.count]
     }
