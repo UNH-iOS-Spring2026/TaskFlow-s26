@@ -2,8 +2,6 @@
 //  AuthView.swift
 //  Task_Flow
 //
-//  ✅ Added: “Forgot Password?” option (sheet) + demo reset flow
-//
 
 import SwiftUI
 import LocalAuthentication
@@ -55,7 +53,6 @@ struct AuthView: View {
                         contentType: .password
                     )
 
-                    // ✅ Forgot Password row
                     HStack {
                         Spacer()
                         Button {
@@ -107,7 +104,6 @@ struct AuthView: View {
                 }
                 .font(.subheadline)
 
-                // Biometrics buttons row (Face ID / Touch ID)
                 HStack(spacing: 12) {
                     biometricButton(kind: .faceID)
                     biometricButton(kind: .touchID)
@@ -126,7 +122,7 @@ struct AuthView: View {
 
                 Spacer()
 
-                Text("Demo: If you never signed up, login accepts any email + password.")
+                Text("Use your email and password to login. Biometrics requires your email to be entered first.")
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.35))
                     .padding(.bottom, 12)
@@ -139,6 +135,7 @@ struct AuthView: View {
         }
         .sheet(isPresented: $showForgot) {
             ForgotPasswordSheet(prefillEmail: email)
+                .environmentObject(auth)
         }
     }
 
@@ -149,7 +146,7 @@ struct AuthView: View {
 
         errorText = nil
         let e = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        let p = password
+        let p = password.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !e.isEmpty, !p.isEmpty else {
             errorText = "Please enter email and password."
@@ -158,12 +155,12 @@ struct AuthView: View {
 
         isLoading = true
 
-        // ✅ Don’t guess your AuthStore API. Use the common one you already had:
-        // If your AuthStore.login is synchronous, this still works.
-        // If it’s async internally, it can update published state (RootView should react).
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            auth.login(email: e, password: p) // <-- keep your existing AuthStore method
+        auth.login(email: e, password: p) { success, message in
             isLoading = false
+
+            if !success {
+                errorText = message ?? "Login failed."
+            }
         }
     }
 
@@ -173,7 +170,6 @@ struct AuthView: View {
         let title = (kind == .faceID) ? "Face ID" : "Touch ID"
         let icon  = (kind == .faceID) ? "faceid" : "touchid"
 
-        // Show enabled only if device supports that biometry
         let enabled =
             biometricsAvailable &&
             ((kind == .faceID && biometryType == .faceID) ||
@@ -212,18 +208,25 @@ struct AuthView: View {
 
         ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: "Authenticate to login") { success, _ in
             DispatchQueue.main.async {
-                isLoading = false
                 if success {
-                    // ✅ Demo behavior: allow biometric login without password
-                    // If you want: require email field not empty.
                     let e = email.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if e.isEmpty {
-                        self.errorText = "Enter your email first, then use biometrics."
+
+                    guard !e.isEmpty else {
+                        isLoading = false
+                        errorText = "Enter your email first, then use biometrics."
                         return
                     }
-                    auth.login(email: e, password: "biometric") // demo password
+
+                    auth.login(email: e, password: "biometric") { success, message in
+                        isLoading = false
+
+                        if !success {
+                            errorText = message ?? "Biometric login failed."
+                        }
+                    }
                 } else {
-                    self.errorText = "Authentication failed. Try again."
+                    isLoading = false
+                    errorText = "Authentication failed. Try again."
                 }
             }
         }
@@ -259,7 +262,7 @@ struct AuthView: View {
     }
 }
 
-// MARK: - DarkField (consistent style)
+// MARK: - DarkField
 
 private struct DarkField: View {
     let placeholder: String
@@ -304,13 +307,15 @@ private struct DarkField: View {
     }
 }
 
-// MARK: - Forgot Password Sheet (demo)
+// MARK: - Forgot Password Sheet
 
 private struct ForgotPasswordSheet: View {
+    @EnvironmentObject var auth: AuthStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var email: String
     @State private var sent = false
+    @State private var isLoading = false
     @State private var errText: String?
 
     init(prefillEmail: String) {
@@ -336,7 +341,7 @@ private struct ForgotPasswordSheet: View {
                         .foregroundStyle(.white)
                         .padding(.top, 10)
 
-                    Text("Enter your email. We'll show a demo reset confirmation.")
+                    Text("Enter your email. We'll send a password reset email.")
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.6))
                         .multilineTextAlignment(.center)
@@ -355,16 +360,23 @@ private struct ForgotPasswordSheet: View {
                     Button {
                         sendReset()
                     } label: {
-                        Text(sent ? "Reset Sent ✅" : "Send Reset Link")
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
-                            .background(Color.purple.opacity(0.92))
-                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .fill(Color.purple.opacity(0.92))
+                                .frame(height: 52)
+
+                            if isLoading {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Text(sent ? "Reset Sent ✅" : "Send Reset Link")
+                                    .font(.headline.weight(.semibold))
+                                    .foregroundStyle(.white)
+                            }
+                        }
                     }
                     .padding(.horizontal, 26)
-                    .disabled(sent)
+                    .disabled(sent || isLoading)
 
                     if let e = errText {
                         Text(e)
@@ -391,22 +403,29 @@ private struct ForgotPasswordSheet: View {
         errText = nil
         let e = email.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard e.contains("@"), e.contains(".") else {
-            errText = "Enter a valid email address."
+        guard !e.isEmpty else {
+            errText = "Enter your email address."
             return
         }
 
-        // ✅ Demo flow (no backend). If you later add a real backend,
-        // call it here and show success/failure.
-        sent = true
+        isLoading = true
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            dismiss()
+        auth.resetPassword(email: e) { success, message in
+            isLoading = false
+
+            if success {
+                sent = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    dismiss()
+                }
+            } else {
+                errText = message ?? "Could not send reset email."
+            }
         }
     }
 }
 
-// MARK: - Sign Up (kept minimal + safe: no guessing AuthStore methods)
+// MARK: - Sign Up Sheet
 
 private struct SignUpSheet: View {
     @EnvironmentObject var auth: AuthStore
@@ -416,6 +435,7 @@ private struct SignUpSheet: View {
     @State private var password = ""
     @State private var confirm = ""
     @State private var errText: String?
+    @State private var isLoading = false
 
     var body: some View {
         NavigationStack {
@@ -463,17 +483,25 @@ private struct SignUpSheet: View {
                     .padding(.top, 6)
 
                     Button {
-                        createAccountDemo()
+                        createAccount()
                     } label: {
-                        Text("Create Account")
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
-                            .background(Color.purple.opacity(0.92))
-                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .fill(Color.purple.opacity(0.92))
+                                .frame(height: 52)
+
+                            if isLoading {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Text("Create Account")
+                                    .font(.headline.weight(.semibold))
+                                    .foregroundStyle(.white)
+                            }
+                        }
                     }
                     .padding(.horizontal, 26)
+                    .disabled(isLoading)
 
                     if let e = errText {
                         Text(e)
@@ -495,26 +523,38 @@ private struct SignUpSheet: View {
         }
     }
 
-    // ✅ This avoids calling missing AuthStore APIs like createAccount().
-    // It just tells the user to login (demo), or you can later implement real signup in AuthStore.
-    private func createAccountDemo() {
+    private func createAccount() {
         errText = nil
 
         let e = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard e.contains("@"), e.contains(".") else {
-            errText = "Enter a valid email."
+        let p = password.trimmingCharacters(in: .whitespacesAndNewlines)
+        let c = confirm.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !e.isEmpty else {
+            errText = "Enter your email."
             return
         }
-        guard password.count >= 4 else {
-            errText = "Password must be at least 4 characters."
+
+        guard p.count >= 6 else {
+            errText = "Password must be at least 6 characters."
             return
         }
-        guard password == confirm else {
+
+        guard p == c else {
             errText = "Passwords do not match."
             return
         }
 
-        // Demo: Auto-fill login fields by dismissing and letting user login.
-        dismiss()
+        isLoading = true
+
+        auth.createAccount(email: e, password: p) { success, message in
+            isLoading = false
+
+            if success {
+                dismiss()
+            } else {
+                errText = message ?? "Could not create account."
+            }
+        }
     }
 }

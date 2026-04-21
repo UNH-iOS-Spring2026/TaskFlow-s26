@@ -3,8 +3,6 @@
 //  Task_Flow
 //
 
-//code assisted by the LLM (ChatGPT)
-
 import SwiftUI
 
 struct HabitsView: View {
@@ -49,7 +47,7 @@ struct HabitsView: View {
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(primaryTextColor)
                             .frame(width: 38, height: 38)
-                            .backgroundz(cardBackground)
+                            .background(cardBackground)
                             .overlay(
                                 Circle()
                                     .stroke(cardBorder, lineWidth: 1)
@@ -202,7 +200,6 @@ struct HabitsView: View {
 
         store.saveAll()
     }
-    
 
     private func markHabitDone(at index: Int) {
         let now = Date()
@@ -252,7 +249,77 @@ struct HabitsView: View {
         store.habits.removeAll { $0.id == habit.id }
         store.saveAll()
     }
-    
+
+    private func normalizeCompletedTodayFlags() {
+        let calendar = Calendar.current
+        var changed = false
+
+        for index in store.habits.indices {
+            let isToday: Bool
+            if let lastCompleted = store.habits[index].lastCompleted {
+                isToday = calendar.isDateInToday(lastCompleted)
+            } else {
+                isToday = false
+            }
+
+            if store.habits[index].isCompletedToday != isToday {
+                store.habits[index].isCompletedToday = isToday
+                changed = true
+            }
+        }
+
+        if changed {
+            store.saveAll()
+        }
+    }
+
+    private func formattedDate(_ date: Date) -> String {
+        date.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    private var primaryTextColor: Color {
+        darkMode ? .white : .black
+    }
+
+    private var secondaryTextColor: Color {
+        darkMode ? .white.opacity(0.72) : .black.opacity(0.65)
+    }
+
+    private var cardBackground: Color {
+        darkMode ? Color.white.opacity(0.08) : Color.black.opacity(0.04)
+    }
+
+    private var cardBorder: Color {
+        darkMode ? Color.white.opacity(0.10) : Color.black.opacity(0.08)
+    }
+
+    private var accentTileColor: Color {
+        darkMode ? Color.orange.opacity(0.9) : Color.orange
+    }
+
+    private var backgroundView: some View {
+        Group {
+            if darkMode {
+                LinearGradient(
+                    colors: [
+                        Color.black,
+                        Color(red: 0.05, green: 0.05, blue: 0.10)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            } else {
+                LinearGradient(
+                    colors: [
+                        Color.white,
+                        Color(red: 0.95, green: 0.97, blue: 1.0)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+        }
+    }
 }
 
 struct AddHabitSheet: View {
@@ -358,6 +425,9 @@ struct AddHabitSheet: View {
 }
 
 #Preview {
-    HabitsView()
-        .environmentObject(AppStore())
+    let auth = AuthStore()
+    let store = AppStore(auth: auth)
+
+    return HabitsView()
+        .environmentObject(store)
 }

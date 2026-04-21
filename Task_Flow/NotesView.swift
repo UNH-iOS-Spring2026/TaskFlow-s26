@@ -251,6 +251,7 @@ struct AddNoteSheetModern: View {
     @State private var title = ""
     @State private var bodyText = ""
     @State private var selectedSeed: Int = 2
+    @State private var errorText: String?
 
     private let seeds: [Int] = [0, 1, 2, 3, 4, 5]
 
@@ -332,10 +333,18 @@ struct AddNoteSheetModern: View {
                             .padding(.top, 6)
                     }
 
+                    if let errorText {
+                        Text(errorText)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.red)
+                    }
+
                     HStack(spacing: 12) {
                         Button {
                             store.addNote(title: title, body: bodyText, colorSeed: selectedSeed) { error in
-                                if error == nil {
+                                if let error {
+                                    errorText = error
+                                } else {
                                     dismiss()
                                 }
                             }

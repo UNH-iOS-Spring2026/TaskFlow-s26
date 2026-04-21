@@ -1,94 +1,136 @@
 import Foundation
 import Combine
+import FirebaseAuth
 
 final class AuthStore: ObservableObject {
     @Published var isLoggedIn: Bool = false
     @Published var currentEmail: String? = nil
+    @Published var currentUserId: String? = nil
 
-    // Demo local accounts: email -> password
-    @Published private(set) var accounts: [String: String] = [:]
-
-    private let kLoggedIn = "tf_logged_in"
-    private let kEmail = "tf_email"
-    private let kAccounts = "tf_accounts"
+    private var authStateHandle: AuthStateDidChangeListenerHandle?
 
     init() {
-        // restore session
-        isLoggedIn = UserDefaults.standard.bool(forKey: kLoggedIn)
-        currentEmail = UserDefaults.standard.string(forKey: kEmail)
-
-        // restore accounts
-        if let data = UserDefaults.standard.data(forKey: kAccounts),
-           let decoded = try? JSONDecoder().decode([String: String].self, from: data) {
-            accounts = decoded
+        authStateHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
+            DispatchQueue.main.async {
+                self?.isLoggedIn = (user != nil)
+                self?.currentEmail = user?.email
+                self?.currentUserId = user?.uid
+            }
         }
     }
 
-    // MARK: - Demo Signup
-    @discardableResult
-    func createAccount(email: String, password: String) -> Bool {
-        let e = normalize(email)
-        let p = password.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard isValidEmail(e), p.count >= 3 else { return false }
-        guard accounts[e] == nil else { return false } // already exists
-
-        accounts[e] = p
-        persistAccounts()
-
-        // auto-login after signup
-        currentEmail = e
-        isLoggedIn = true
-        persistSession()
-        return true
+    deinit {
+        if let handle = authStateHandle {
+            Auth.auth().removeStateDidChangeListener(handle)
+        }
     }
 
-    // MARK: - Demo Login
-    @discardableResult
-    func login(email: String, password: String) -> Bool {
+    func createAccount(
+        email: String,
+        password: String,
+        completion: @escaping (Bool, String?) -> Void
+    ) {
         let e = normalize(email)
         let p = password.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // If user never signed up, you said you want “demo”: allow any non-empty login
-        if accounts.isEmpty {
-            guard isValidEmail(e), !p.isEmpty else { return false }
-            currentEmail = e
-            isLoggedIn = true
-            persistSession()
-            return true
+        guard isValidEmail(e) else {
+            completion(false, "Enter a valid email address.")
+            return
         }
 
-        guard let saved = accounts[e], saved == p else { return false }
+        guard p.count >= 6 else {
+            completion(false, "Password must be at least 6 characters.")
+            return
+        }
 
-        currentEmail = e
-        isLoggedIn = true
-        persistSession()
-        return true
+        Auth.auth().createUser(withEmail: e, password: p) { [weak self] result, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    completion(false, error.localizedDescription)
+                    return
+                }
+
+                self?.isLoggedIn = true
+                self?.currentEmail = result?.user.email
+                self?.currentUserId = result?.user.uid
+                completion(true, nil)
+            }
+        }
     }
 
-    func logout() {
-        isLoggedIn = false
-        currentEmail = nil
-        persistSession()
+    func login(
+        email: String,
+        password: String,
+        completion: @escaping (Bool, String?) -> Void
+    ) {
+        let e = normalize(email)
+        let p = password.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard isValidEmail(e) else {
+            completion(false, "Enter a valid email address.")
+            return
+        }
+
+        guard !p.isEmpty else {
+            completion(false, "Password cannot be empty.")
+            return
+        }
+
+        Auth.auth().signIn(withEmail: e, password: p) { [weak self] result, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    completion(false, error.localizedDescription)
+                    return
+                }
+
+                self?.isLoggedIn = true
+                self?.currentEmail = result?.user.email
+                self?.currentUserId = result?.user.uid
+                completion(true, nil)
+            }
+        }
     }
 
-    // MARK: - Helpers
+    func logout(completion: ((Bool, String?) -> Void)? = nil) {
+        do {
+            try Auth.auth().signOut()
+            DispatchQueue.main.async {
+                self.isLoggedIn = false
+                self.currentEmail = nil
+                self.currentUserId = nil
+                completion?(true, nil)
+            }
+        } catch {
+            DispatchQueue.main.async {
+                completion?(false, error.localizedDescription)
+            }
+        }
+    }
+
+    func resetPassword(email: String, completion: @escaping (Bool, String?) -> Void) {
+        let e = normalize(email)
+
+        guard isValidEmail(e) else {
+            completion(false, "Enter a valid email address.")
+            return
+        }
+
+        Auth.auth().sendPasswordReset(withEmail: e) { error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    completion(false, error.localizedDescription)
+                } else {
+                    completion(true, nil)
+                }
+            }
+        }
+    }
+
     private func normalize(_ email: String) -> String {
         email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     private func isValidEmail(_ s: String) -> Bool {
         s.contains("@") && s.contains(".") && s.count >= 5
-    }
-
-    private func persistSession() {
-        UserDefaults.standard.set(isLoggedIn, forKey: kLoggedIn)
-        UserDefaults.standard.set(currentEmail, forKey: kEmail)
-    }
-
-    private func persistAccounts() {
-        if let data = try? JSONEncoder().encode(accounts) {
-            UserDefaults.standard.set(data, forKey: kAccounts)
-        }
     }
 }

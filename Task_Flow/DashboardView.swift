@@ -14,7 +14,6 @@ struct DashboardView: View {
 
                 ScrollView {
                     VStack(spacing: 16) {
-
                         topBar
                             .padding(.top, 8)
 
@@ -36,7 +35,6 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Background
     private var background: some View {
         LinearGradient(
             colors: [
@@ -50,13 +48,12 @@ struct DashboardView: View {
         .ignoresSafeArea()
     }
 
-    // MARK: - Top Bar
     private var topBar: some View {
         VStack(spacing: 10) {
-            // Search
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
+
                 TextField("Search pages…", text: $search)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -66,7 +63,6 @@ struct DashboardView: View {
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-            // Profile + Logout
             HStack(spacing: 10) {
                 HStack(spacing: 10) {
                     ZStack {
@@ -102,7 +98,6 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Hero
     private var heroCard: some View {
         ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -131,7 +126,6 @@ struct DashboardView: View {
         .frame(height: 130)
     }
 
-    // MARK: - Stat Cards (2x2 grid)
     private var statCards: some View {
         let taskTotal = todaysTasks.count
         let taskDone = todaysTasksDone
@@ -196,12 +190,11 @@ struct DashboardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    // MARK: - Big Panels
     private var bigPanels: some View {
         HStack(spacing: 12) {
             bigPanel(
-                title: "Today's Todos",
-                emptyText: "No todos yet. Great way to start the day!",
+                title: "Today's Tasks",
+                emptyText: "No tasks yet. Great way to start the day!",
                 action: { showAddTask = true }
             ) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -216,6 +209,14 @@ struct DashboardView: View {
                                 .lineLimit(1)
 
                             Spacer()
+
+                            Button {
+                                deleteTask(t)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(.red.opacity(0.9))
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -244,6 +245,14 @@ struct DashboardView: View {
                             }
 
                             Spacer()
+
+                            Button {
+                                deleteReminder(r)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(.red.opacity(0.9))
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -258,7 +267,6 @@ struct DashboardView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-
             HStack {
                 Text(title)
                     .font(.headline)
@@ -279,7 +287,7 @@ struct DashboardView: View {
                 }
             }
 
-            if (title.contains("Todos") ? todaysTasks.isEmpty : todaysReminders.isEmpty) {
+            if (title.contains("Tasks") ? todaysTasks.isEmpty : todaysReminders.isEmpty) {
                 Text(emptyText)
                     .foregroundStyle(.white.opacity(0.75))
                     .frame(maxWidth: .infinity, minHeight: 150, alignment: .center)
@@ -299,7 +307,6 @@ struct DashboardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
-    // MARK: - Helpers / Data
     private var displayName: String {
         if let email = store.auth.currentEmail, !email.isEmpty {
             return email.components(separatedBy: "@").first ?? "User"
@@ -351,8 +358,7 @@ struct DashboardView: View {
     }
 
     private var earningsThisMonth: Int {
-        // Keep $0 for now (same as your web screenshot). Wire later if you want hourly rate.
-        return 0
+        0
     }
 
     private func percentText(done: Int, total: Int) -> String {
@@ -361,47 +367,56 @@ struct DashboardView: View {
         return "\(p)% complete"
     }
 
-    // MARK: - Actions
     private func toggleTask(_ task: TaskItem) {
-        guard let i = store.tasks.firstIndex(of: task) else { return }
-        store.tasks[i].isDone.toggle()
-        store.saveAll()
+        store.toggleTask(task)
+    }
+
+    private func deleteTask(_ task: TaskItem) {
+        store.deleteTask(task)
     }
 
     private func toggleReminder(_ r: ReminderItem) {
-        guard let i = store.reminders.firstIndex(of: r) else { return }
-        store.reminders[i].isDone.toggle()
-        store.saveAll()
+        store.toggleReminder(r)
+    }
+
+    private func deleteReminder(_ r: ReminderItem) {
+        store.deleteReminder(r)
     }
 }
-
-// MARK: - Sheets
 
 struct AddTaskSheet: View {
     @EnvironmentObject var store: AppStore
     @Environment(\.dismiss) var dismiss
 
     @State private var title = ""
+    @State private var errorText: String?
 
     var body: some View {
         NavigationStack {
             Form {
                 TextField("Task title", text: $title)
+
+                if let errorText {
+                    Text(errorText)
+                        .foregroundStyle(.red)
+                        .font(.footnote)
+                }
             }
             .navigationTitle("Add Task")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
-                        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !t.isEmpty else { return }
-
-                        // ✅ Force newly created tasks to NOT be completed
-                        let newTask = TaskItem(title: t, isDone: false, createdAt: Date())
-
-                        store.tasks.insert(newTask, at: 0)
-                        store.saveAll()
-                        dismiss()
+                        store.addTask(title: title) { error in
+                            if let error {
+                                errorText = error
+                            } else {
+                                dismiss()
+                            }
+                        }
                     }
                 }
             }
@@ -415,26 +430,34 @@ struct AddReminderSheet: View {
 
     @State private var title = ""
     @State private var dueAt = Date()
+    @State private var errorText: String?
 
     var body: some View {
         NavigationStack {
             Form {
                 TextField("Reminder title", text: $title)
                 DatePicker("Time", selection: $dueAt, displayedComponents: [.date, .hourAndMinute])
+
+                if let errorText {
+                    Text(errorText)
+                        .foregroundStyle(.red)
+                        .font(.footnote)
+                }
             }
             .navigationTitle("Add Reminder")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") {
-                        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !t.isEmpty else { return }
-
-                        let newReminder = ReminderItem(title: t, dueAt: dueAt, isDone: false, createdAt: Date())
-
-                        store.reminders.insert(newReminder, at: 0)
-                        store.saveAll()
-                        dismiss()
+                        store.addReminder(title: title, dueAt: dueAt) { error in
+                            if let error {
+                                errorText = error
+                            } else {
+                                dismiss()
+                            }
+                        }
                     }
                 }
             }
