@@ -2,255 +2,365 @@ import SwiftUI
 
 struct DashboardView: View {
     @EnvironmentObject var store: AppStore
+    @EnvironmentObject var auth: AuthStore
 
-    @State private var search = ""
-    @State private var showAddTask = false
-    @State private var showAddReminder = false
+    @State private var searchText = ""
+    @State private var showAddTaskSheet = false
+    @State private var showAddReminderSheet = false
+
+    private var todayTasks: [TaskItem] {
+        store.tasks.filter { Calendar.current.isDateInToday($0.createdAt) }
+    }
+
+    private var todayReminders: [ReminderItem] {
+        store.reminders.filter { Calendar.current.isDateInToday($0.dueAt) }
+    }
+
+    private var completedTodayTasksCount: Int {
+        todayTasks.filter(\.isDone).count
+    }
+
+    private var completedTodayRemindersCount: Int {
+        todayReminders.filter(\.isDone).count
+    }
+
+    private var taskProgressText: String {
+        guard !todayTasks.isEmpty else { return "0% complete" }
+        let percent = Int((Double(completedTodayTasksCount) / Double(todayTasks.count)) * 100)
+        return "\(percent)% complete"
+    }
+
+    private var reminderProgressText: String {
+        guard !todayReminders.isEmpty else { return "0% complete" }
+        let percent = Int((Double(completedTodayRemindersCount) / Double(todayReminders.count)) * 100)
+        return "\(percent)% complete"
+    }
+
+    private var greetingTitle: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<12: return "Good Morning!"
+        case 12..<17: return "Good Afternoon!"
+        default: return "Good Evening!"
+        }
+    }
+
+    private var displayName: String {
+        let email = auth.currentEmail ?? ""
+        if email.isEmpty { return "User" }
+        return email.components(separatedBy: "@").first ?? "User"
+    }
+
+    private var userInitial: String {
+        String(displayName.prefix(1)).uppercased()
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
-                background
+                LinearGradient(
+                    colors: [
+                        Color.black,
+                        Color(red: 8/255, green: 12/255, blue: 42/255),
+                        Color.black
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
 
-                ScrollView {
+                ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 16) {
                         topBar
-                            .padding(.top, 8)
-
-                        heroCard
-
-                        statCards
-
-                        bigPanels
-
-                        Spacer(minLength: 24)
+                        greetingCard
+                        statsGrid
+                        bottomCards
                     }
-                    .padding(.horizontal)
-                    .padding(.bottom, 30)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 100)
                 }
             }
             .navigationBarHidden(true)
-            .sheet(isPresented: $showAddTask) { AddTaskSheet() }
-            .sheet(isPresented: $showAddReminder) { AddReminderSheet() }
+            .sheet(isPresented: $showAddTaskSheet) {
+                AddTaskDashboardSheet()
+                    .environmentObject(store)
+            }
+            .sheet(isPresented: $showAddReminderSheet) {
+                AddReminderDashboardSheet()
+                    .environmentObject(store)
+            }
         }
-    }
-
-    private var background: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.06, green: 0.07, blue: 0.12),
-                Color(red: 0.10, green: 0.10, blue: 0.18),
-                Color.black
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
     }
 
     private var topBar: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 8) {
+        VStack(spacing: 14) {
+            HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.white.opacity(0.6))
 
-                TextField("Search pages…", text: $search)
-                    .textInputAutocapitalization(.never)
+                TextField("Search pages...", text: $searchText)
+                    .foregroundColor(.white)
                     .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(.ultraThinMaterial)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.white.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-            HStack(spacing: 10) {
+            HStack {
                 HStack(spacing: 10) {
                     ZStack {
-                        Circle().fill(Color.purple.opacity(0.9))
-                        Text(initials)
-                            .foregroundStyle(.white)
-                            .font(.headline)
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [.purple, .pink],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 38, height: 38)
+
+                        Text(userInitial)
+                            .font(.headline.bold())
+                            .foregroundColor(.white)
                     }
-                    .frame(width: 34, height: 34)
 
                     Text(displayName)
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundColor(.white)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.8)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                 Spacer()
 
-                Button(action: { store.auth.logout() }) {
+                Button {
+                    auth.logout()
+                } label: {
                     Text("Logout")
-                        .font(.headline)
+                        .font(.headline.weight(.semibold))
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
         }
     }
 
-    private var heroCard: some View {
-        ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.black.opacity(0.55))
-                .overlay(
-                    LinearGradient(
-                        colors: [Color.purple.opacity(0.55), Color.clear],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                )
+    private var greetingCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(greetingTitle)
+                .font(.system(size: 28, weight: .bold))
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("\(greeting)!")
-                    .font(.system(size: 34, weight: .bold))
-                    .foregroundStyle(Color.purple.opacity(0.92))
-
-                Text("Here's your productivity snapshot for today")
-                    .foregroundStyle(.white.opacity(0.8))
-                    .font(.subheadline)
-            }
-            .padding(18)
+            Text("Here's your productivity snapshot for today")
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.8))
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 130)
+        .foregroundColor(.white)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color.purple.opacity(0.85),
+                    Color.indigo.opacity(0.45),
+                    Color.black.opacity(0.65)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
-    private var statCards: some View {
-        let taskTotal = todaysTasks.count
-        let taskDone = todaysTasksDone
+    private var statsGrid: some View {
+        LazyVGrid(columns: [
+            GridItem(.flexible(), spacing: 12),
+            GridItem(.flexible(), spacing: 12)
+        ], spacing: 12) {
+            statCard(
+                title: "TODAY'S TASKS",
+                value: "\(completedTodayTasksCount)/\(todayTasks.count)",
+                subtitle: taskProgressText,
+                background: Color(red: 78/255, green: 89/255, blue: 126/255)
+            )
 
-        let remTotal = todaysReminders.count
-        let remDone = todaysRemindersDone
+            statCard(
+                title: "REMINDERS",
+                value: "\(completedTodayRemindersCount)/\(todayReminders.count)",
+                subtitle: reminderProgressText,
+                background: Color(red: 92/255, green: 58/255, blue: 112/255)
+            )
 
-        let items: [(String, String, String, Color)] = [
-            ("TODAY'S TASKS",
-             "\(taskDone)/\(taskTotal)",
-             percentText(done: taskDone, total: taskTotal),
-             Color(red: 0.55, green: 0.70, blue: 1.0).opacity(0.22)),
+            statCard(
+                title: "WORK HOURS",
+                value: "0.0 h",
+                subtitle: "this week",
+                background: Color(red: 95/255, green: 66/255, blue: 47/255)
+            )
 
-            ("REMINDERS",
-             "\(remDone)/\(remTotal)",
-             percentText(done: remDone, total: remTotal),
-             Color.purple.opacity(0.18)),
-
-            ("WORK HOURS",
-             "\(String(format: "%.1f", workHoursThisWeek)) h",
-             "this week",
-             Color.orange.opacity(0.18)),
-
-            ("EARNINGS",
-             "$\(earningsThisMonth)",
-             "this month",
-             Color.green.opacity(0.18))
-        ]
-
-        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            ForEach(items.indices, id: \.self) { i in
-                statCard(title: items[i].0, big: items[i].1, small: items[i].2, tint: items[i].3)
-            }
+            statCard(
+                title: "EARNINGS",
+                value: "$0",
+                subtitle: "this month",
+                background: Color(red: 37/255, green: 87/255, blue: 57/255)
+            )
         }
     }
 
-    private func statCard(title: String, big: String, small: String, tint: Color) -> some View {
+    private func statCard(title: String, value: String, subtitle: String, background: Color) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.caption2)
-                .fontWeight(.semibold)
-                .foregroundStyle(.white.opacity(0.75))
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.white.opacity(0.8))
 
-            Text(big)
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.70)
+            Text(value)
+                .font(.system(size: 24, weight: .bold))
+                .foregroundColor(.white)
 
-            Text(small)
-                .font(.footnote)
-                .foregroundStyle(.white.opacity(0.70))
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.75))
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 110, alignment: .leading)
-        .background(tint)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .frame(maxWidth: .infinity, minHeight: 120, alignment: .leading)
+        .padding(16)
+        .background(background.opacity(0.9))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
-    private var bigPanels: some View {
-        HStack(spacing: 12) {
-            bigPanel(
-                title: "Today's Tasks",
-                emptyText: "No tasks yet. Great way to start the day!",
-                action: { showAddTask = true }
-            ) {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(todaysTasks.prefix(6)) { t in
-                        HStack(spacing: 10) {
-                            Image(systemName: t.isDone ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(t.isDone ? .green : .white.opacity(0.55))
-                                .onTapGesture { toggleTask(t) }
+    private var bottomCards: some View {
+        HStack(alignment: .top, spacing: 12) {
+            todayTasksCard
+            todayRemindersCard
+        }
+    }
 
-                            Text(t.title)
-                                .foregroundStyle(.white)
+    private var todayTasksCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("Today's Tasks")
+                    .font(.headline.weight(.semibold))
+                    .foregroundColor(.white)
+
+                Spacer()
+
+                Button {
+                    showAddTaskSheet = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.headline.bold())
+                        .foregroundColor(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Color.white.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+            }
+
+            if todayTasks.isEmpty {
+                Text("No tasks for today. Add one and get moving.")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.75))
+                    .frame(maxWidth: .infinity, minHeight: 130)
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(todayTasks) { task in
+                        HStack(spacing: 10) {
+                            Button {
+                                store.toggleTask(task)
+                            } label: {
+                                Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
+                                    .font(.title3)
+                                    .foregroundColor(task.isDone ? .green : .white.opacity(0.7))
+                            }
+                            .buttonStyle(.plain)
+
+                            Text(task.title)
+                                .font(.title3)
+                                .foregroundColor(.white)
+                                .strikethrough(task.isDone, color: .white.opacity(0.7))
                                 .lineLimit(1)
 
                             Spacer()
 
                             Button {
-                                deleteTask(t)
+                                store.deleteTask(task)
                             } label: {
                                 Image(systemName: "trash")
-                                    .foregroundStyle(.red.opacity(0.9))
+                                    .foregroundColor(.red)
+                                    .font(.headline)
                             }
                             .buttonStyle(.plain)
                         }
                     }
                 }
             }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
 
-            bigPanel(
-                title: "Today's Reminders",
-                emptyText: "No reminders for today. Enjoy your day!",
-                action: { showAddReminder = true }
-            ) {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(todaysReminders.prefix(6)) { r in
+    private var todayRemindersCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("Today's Reminders")
+                    .font(.headline.weight(.semibold))
+                    .foregroundColor(.white)
+
+                Spacer()
+
+                Button {
+                    showAddReminderSheet = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.headline.bold())
+                        .foregroundColor(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Color.white.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+            }
+
+            if todayReminders.isEmpty {
+                Text("No reminders for today. Enjoy your day!")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.75))
+                    .frame(maxWidth: .infinity, minHeight: 130)
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(todayReminders) { reminder in
                         HStack(spacing: 10) {
-                            Image(systemName: r.isDone ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(r.isDone ? .green : .white.opacity(0.55))
-                                .onTapGesture { toggleReminder(r) }
+                            Button {
+                                store.toggleReminder(reminder)
+                            } label: {
+                                Image(systemName: reminder.isDone ? "checkmark.circle.fill" : "circle")
+                                    .font(.title3)
+                                    .foregroundColor(reminder.isDone ? .green : .white.opacity(0.7))
+                            }
+                            .buttonStyle(.plain)
 
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(r.title)
-                                    .foregroundStyle(.white)
-                                    .lineLimit(1)
+                                Text(reminder.title)
+                                    .font(.title3)
+                                    .foregroundColor(.white)
 
-                                Text(r.dueAt.formatted(date: .omitted, time: .shortened))
-                                    .font(.footnote)
-                                    .foregroundStyle(.white.opacity(0.65))
+                                Text(reminder.dueAt.formatted(date: .omitted, time: .shortened))
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.65))
                             }
 
                             Spacer()
 
                             Button {
-                                deleteReminder(r)
+                                store.deleteReminder(reminder)
                             } label: {
                                 Image(systemName: "trash")
-                                    .foregroundStyle(.red.opacity(0.9))
+                                    .foregroundColor(.red)
+                                    .font(.headline)
                             }
                             .buttonStyle(.plain)
                         }
@@ -258,207 +368,67 @@ struct DashboardView: View {
                 }
             }
         }
-    }
-
-    private func bigPanel<Content: View>(
-        title: String,
-        emptyText: String,
-        action: @escaping () -> Void,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(title)
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-
-                Spacer()
-
-                Button(action: action) {
-                    Image(systemName: "plus")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(Color.white.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                }
-            }
-
-            if (title.contains("Tasks") ? todaysTasks.isEmpty : todaysReminders.isEmpty) {
-                Text(emptyText)
-                    .foregroundStyle(.white.opacity(0.75))
-                    .frame(maxWidth: .infinity, minHeight: 150, alignment: .center)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 20)
-            } else {
-                content()
-                    .padding(.top, 6)
-            }
-
-            Spacer(minLength: 0)
-        }
         .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 260, alignment: .topLeading)
-        .background(Color.white.opacity(0.06))
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-    }
-
-    private var displayName: String {
-        if let email = store.auth.currentEmail, !email.isEmpty {
-            return email.components(separatedBy: "@").first ?? "User"
-        }
-        return "ar"
-    }
-
-    private var initials: String {
-        let parts = displayName.split(separator: " ")
-        if parts.count >= 2 {
-            return "\(parts[0].first ?? "A")\(parts[1].first ?? "R")".uppercased()
-        }
-        return String(displayName.prefix(1)).uppercased()
-    }
-
-    private var greeting: String {
-        let hour = Calendar.current.component(.hour, from: Date())
-        if hour < 12 { return "Good Morning" }
-        if hour < 18 { return "Good Afternoon" }
-        return "Good Evening"
-    }
-
-    private var todaysTasks: [TaskItem] {
-        store.tasks.filter { Calendar.current.isDateInToday($0.createdAt) }
-    }
-
-    private var todaysTasksDone: Int {
-        todaysTasks.filter { $0.isDone }.count
-    }
-
-    private var todaysReminders: [ReminderItem] {
-        store.reminders.filter { Calendar.current.isDateInToday($0.dueAt) }
-    }
-
-    private var todaysRemindersDone: Int {
-        todaysReminders.filter { $0.isDone }.count
-    }
-
-    private var workHoursThisWeek: Double {
-        let cal = Calendar.current
-        guard let weekStart = cal.dateInterval(of: .weekOfYear, for: Date())?.start else { return 0 }
-        let entries = store.workHours.filter { $0.date >= weekStart }
-        let seconds = entries.reduce(0.0) { acc, e in
-            let raw = e.endTime.timeIntervalSince(e.startTime)
-            let breakSec = Double(e.breakMinutes) * 60.0
-            return acc + max(0, raw - breakSec)
-        }
-        return seconds / 3600.0
-    }
-
-    private var earningsThisMonth: Int {
-        0
-    }
-
-    private func percentText(done: Int, total: Int) -> String {
-        guard total > 0 else { return "0% complete" }
-        let p = Int((Double(done) / Double(total)) * 100.0)
-        return "\(p)% complete"
-    }
-
-    private func toggleTask(_ task: TaskItem) {
-        store.toggleTask(task)
-    }
-
-    private func deleteTask(_ task: TaskItem) {
-        store.deleteTask(task)
-    }
-
-    private func toggleReminder(_ r: ReminderItem) {
-        store.toggleReminder(r)
-    }
-
-    private func deleteReminder(_ r: ReminderItem) {
-        store.deleteReminder(r)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
 
-struct AddTaskSheet: View {
+struct AddTaskDashboardSheet: View {
     @EnvironmentObject var store: AppStore
-    @Environment(\.dismiss) var dismiss
-
+    @Environment(\.dismiss) private var dismiss
     @State private var title = ""
-    @State private var errorText: String?
 
     var body: some View {
         NavigationStack {
             Form {
                 TextField("Task title", text: $title)
-
-                if let errorText {
-                    Text(errorText)
-                        .foregroundStyle(.red)
-                        .font(.footnote)
-                }
             }
-            .navigationTitle("Add Task")
+            .navigationTitle("New Task")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
 
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        store.addTask(title: title) { error in
-                            if let error {
-                                errorText = error
-                            } else {
-                                dismiss()
-                            }
+                        store.addTask(title: title) { success in
+                            if success { dismiss() }
                         }
                     }
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
     }
 }
 
-struct AddReminderSheet: View {
+struct AddReminderDashboardSheet: View {
     @EnvironmentObject var store: AppStore
-    @Environment(\.dismiss) var dismiss
-
+    @Environment(\.dismiss) private var dismiss
     @State private var title = ""
     @State private var dueAt = Date()
-    @State private var errorText: String?
 
     var body: some View {
         NavigationStack {
             Form {
                 TextField("Reminder title", text: $title)
-                DatePicker("Time", selection: $dueAt, displayedComponents: [.date, .hourAndMinute])
-
-                if let errorText {
-                    Text(errorText)
-                        .foregroundStyle(.red)
-                        .font(.footnote)
-                }
+                DatePicker("Due time", selection: $dueAt)
             }
-            .navigationTitle("Add Reminder")
+            .navigationTitle("New Reminder")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+
+                ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        store.addReminder(title: title, dueAt: dueAt) { error in
-                            if let error {
-                                errorText = error
-                            } else {
-                                dismiss()
-                            }
+                        store.addReminder(title: title, dueAt: dueAt) { success in
+                            if success { dismiss() }
                         }
                     }
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }

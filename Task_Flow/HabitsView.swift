@@ -63,8 +63,9 @@ struct HabitsView: View {
             }
             .alert("Delete Habit", isPresented: $showDeleteAlert, presenting: habitToDelete) { habit in
                 Button("Cancel", role: .cancel) { }
+
                 Button("Delete", role: .destructive) {
-                    deleteHabit(habit)
+                    store.deleteHabit(habit)
                 }
             } message: { habit in
                 Text("Are you sure you want to delete \"\(habit.title)\"?")
@@ -190,25 +191,24 @@ struct HabitsView: View {
     }
 
     private func toggleHabitCompletion(_ habit: HabitItem) {
-        guard let index = store.habits.firstIndex(where: { $0.id == habit.id }) else { return }
+        var updatedHabit = habit
 
-        if store.habits[index].isCompletedToday {
-            undoHabitForToday(at: index)
+        if updatedHabit.isCompletedToday {
+            undoHabitForToday(&updatedHabit)
         } else {
-            markHabitDone(at: index)
+            markHabitDone(&updatedHabit)
         }
 
-        store.saveAll()
+        store.updateHabit(updatedHabit)
     }
 
-    private func markHabitDone(at index: Int) {
+    private func markHabitDone(_ habit: inout HabitItem) {
         let now = Date()
         let calendar = Calendar.current
-        let currentHabit = store.habits[index]
 
-        if let lastCompleted = currentHabit.lastCompleted {
+        if let lastCompleted = habit.lastCompleted {
             if calendar.isDateInToday(lastCompleted) {
-                store.habits[index].isCompletedToday = true
+                habit.isCompletedToday = true
                 return
             }
 
@@ -217,59 +217,51 @@ struct HabitsView: View {
             let dayDifference = calendar.dateComponents([.day], from: startOfLast, to: startOfNow).day ?? 0
 
             if dayDifference == 1 {
-                store.habits[index].streak += 1
+                habit.streak += 1
             } else {
-                store.habits[index].streak = 1
+                habit.streak = 1
             }
         } else {
-            store.habits[index].streak = 1
+            habit.streak = 1
         }
 
-        store.habits[index].lastCompleted = now
-        store.habits[index].isCompletedToday = true
+        habit.lastCompleted = now
+        habit.isCompletedToday = true
     }
 
-    private func undoHabitForToday(at index: Int) {
-        guard store.habits[index].isCompletedToday else { return }
+    private func undoHabitForToday(_ habit: inout HabitItem) {
+        guard habit.isCompletedToday else { return }
 
-        if store.habits[index].streak > 0 {
-            store.habits[index].streak -= 1
+        if habit.streak > 0 {
+            habit.streak -= 1
         }
 
-        if store.habits[index].streak == 0 {
-            store.habits[index].lastCompleted = nil
+        if habit.streak == 0 {
+            habit.lastCompleted = nil
         } else {
-            store.habits[index].lastCompleted = Calendar.current.date(byAdding: .day, value: -1, to: Date())
+            habit.lastCompleted = Calendar.current.date(byAdding: .day, value: -1, to: Date())
         }
 
-        store.habits[index].isCompletedToday = false
-    }
-
-    private func deleteHabit(_ habit: HabitItem) {
-        store.habits.removeAll { $0.id == habit.id }
-        store.saveAll()
+        habit.isCompletedToday = false
     }
 
     private func normalizeCompletedTodayFlags() {
         let calendar = Calendar.current
-        var changed = false
 
-        for index in store.habits.indices {
+        for habit in store.habits {
             let isToday: Bool
-            if let lastCompleted = store.habits[index].lastCompleted {
+
+            if let lastCompleted = habit.lastCompleted {
                 isToday = calendar.isDateInToday(lastCompleted)
             } else {
                 isToday = false
             }
 
-            if store.habits[index].isCompletedToday != isToday {
-                store.habits[index].isCompletedToday = isToday
-                changed = true
+            if habit.isCompletedToday != isToday {
+                var updatedHabit = habit
+                updatedHabit.isCompletedToday = isToday
+                store.updateHabit(updatedHabit)
             }
-        }
-
-        if changed {
-            store.saveAll()
         }
     }
 
@@ -378,16 +370,7 @@ struct AddHabitSheet: View {
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedTitle.isEmpty else { return }
 
-        let newHabit = HabitItem(
-            title: cleanedTitle,
-            streak: 0,
-            lastCompleted: nil,
-            createdAt: Date(),
-            isCompletedToday: false
-        )
-
-        store.habits.insert(newHabit, at: 0)
-        store.saveAll()
+        store.addHabit(title: cleanedTitle)
         dismiss()
     }
 

@@ -1,36 +1,15 @@
 import SwiftUI
 
-struct GoalRecord: Identifiable, Codable, Equatable {
-    let id: UUID
-    var goalName: String
-    var goalDescription: String
-    var targetDate: Date
-
-    init(
-        id: UUID = UUID(),
-        goalName: String,
-        goalDescription: String,
-        targetDate: Date
-    ) {
-        self.id = id
-        self.goalName = goalName
-        self.goalDescription = goalDescription
-        self.targetDate = targetDate
-    }
-}
-
 struct GoalsView: View {
+    @EnvironmentObject var store: AppStore
     @AppStorage("tf_dark_mode") private var darkMode = false
 
     @State private var goalName: String = ""
     @State private var goalDescription: String = ""
     @State private var targetDate: Date = Date()
 
-    @State private var goals: [GoalRecord] = []
     @State private var showValidationAlert = false
     @State private var selectedGoal: GoalRecord?
-
-    private let storageKey = "saved_goals_records"
 
     var body: some View {
         NavigationStack {
@@ -41,7 +20,7 @@ struct GoalsView: View {
                 VStack(spacing: 18) {
                     createGoalSection
 
-                    if goals.isEmpty {
+                    if store.goalRecords.isEmpty {
                         Spacer()
                         Text("No goals saved yet")
                             .foregroundColor(secondaryTextColor)
@@ -49,7 +28,7 @@ struct GoalsView: View {
                     } else {
                         ScrollView {
                             LazyVStack(spacing: 12) {
-                                ForEach(goals) { goal in
+                                ForEach(store.goalRecords) { goal in
                                     goalCard(goal)
                                 }
                             }
@@ -62,9 +41,6 @@ struct GoalsView: View {
             }
             .navigationTitle("Goals")
             .navigationBarTitleDisplayMode(.large)
-            .onAppear {
-                loadGoals()
-            }
             .alert("Please enter a goal name", isPresented: $showValidationAlert) {
                 Button("OK", role: .cancel) { }
             }
@@ -73,10 +49,10 @@ struct GoalsView: View {
                     goal: goal,
                     darkMode: darkMode,
                     onSave: { updatedGoal in
-                        updateGoal(updatedGoal)
+                        store.updateGoalRecord(updatedGoal)
                     },
                     onDelete: { goalToDelete in
-                        deleteGoal(goalToDelete)
+                        store.deleteGoalRecord(goalToDelete)
                     }
                 )
             }
@@ -205,7 +181,7 @@ struct GoalsView: View {
                 Spacer()
 
                 Button {
-                    deleteGoal(goal)
+                    store.deleteGoalRecord(goal)
                 } label: {
                     Image(systemName: "trash")
                         .foregroundColor(.red)
@@ -273,8 +249,7 @@ struct GoalsView: View {
             targetDate: targetDate
         )
 
-        goals.append(newGoal)
-        saveGoalsToStorage()
+        store.addGoalRecord(newGoal)
         clearForm()
     }
 
@@ -282,41 +257,6 @@ struct GoalsView: View {
         goalName = ""
         goalDescription = ""
         targetDate = Date()
-    }
-
-    private func updateGoal(_ updatedGoal: GoalRecord) {
-        if let index = goals.firstIndex(where: { $0.id == updatedGoal.id }) {
-            goals[index] = updatedGoal
-            saveGoalsToStorage()
-        }
-    }
-
-    private func deleteGoal(_ goal: GoalRecord) {
-        goals.removeAll { $0.id == goal.id }
-        saveGoalsToStorage()
-
-        if selectedGoal?.id == goal.id {
-            selectedGoal = nil
-        }
-    }
-
-    private func saveGoalsToStorage() {
-        do {
-            let data = try JSONEncoder().encode(goals)
-            UserDefaults.standard.set(data, forKey: storageKey)
-        } catch {
-            print("Failed to save goals: \(error.localizedDescription)")
-        }
-    }
-
-    private func loadGoals() {
-        guard let data = UserDefaults.standard.data(forKey: storageKey) else { return }
-
-        do {
-            goals = try JSONDecoder().decode([GoalRecord].self, from: data)
-        } catch {
-            print("Failed to load goals: \(error.localizedDescription)")
-        }
     }
 
     private func formattedDate(_ date: Date) -> String {
@@ -331,6 +271,7 @@ struct GoalDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var editableGoal: GoalRecord
+
     let darkMode: Bool
     let onSave: (GoalRecord) -> Void
     let onDelete: (GoalRecord) -> Void
@@ -397,5 +338,9 @@ struct GoalDetailSheet: View {
 }
 
 #Preview {
-    GoalsView()
+    let auth = AuthStore()
+    let store = AppStore(auth: auth)
+
+    return GoalsView()
+        .environmentObject(store)
 }

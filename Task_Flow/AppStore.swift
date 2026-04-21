@@ -1,69 +1,42 @@
-//
-//  AppStore.swift
-//  Task_Flow
-//
-
 import Foundation
 import Combine
+import SwiftUI
 import FirebaseFirestore
 
-@MainActor
 final class AppStore: ObservableObject {
-
-    @Published var auth: AuthStore
-
-    @Published var tasks: [TaskItem] = []
-    @Published var reminders: [ReminderItem] = []
     @Published var notes: [NoteItem] = []
-    @Published var workHours: [WorkHourEntry] = []
-    @Published var goals: [GoalItem] = []
+    @Published var reminders: [ReminderItem] = []
+    @Published var tasks: [TaskItem] = []
+    @Published var workSessions: [WorkSessionRecord] = []
+    @Published var expenses: [ExpenseRecord] = []
+    @Published var goalRecords: [GoalRecord] = []
     @Published var habits: [HabitItem] = []
 
-    private let workFile = "workhours.json"
-    private let goalsFile = "goals.json"
-    private let habitsFile = "habits.json"
-
+    private let auth: AuthStore
     private let db = Firestore.firestore()
+    private var cancellables = Set<AnyCancellable>()
 
     private var notesListener: ListenerRegistration?
     private var tasksListener: ListenerRegistration?
     private var remindersListener: ListenerRegistration?
-
-    private var cancellables = Set<AnyCancellable>()
+    private var workSessionsListener: ListenerRegistration?
+    private var expensesListener: ListenerRegistration?
+    private var goalsListener: ListenerRegistration?
+    private var habitsListener: ListenerRegistration?
 
     init(auth: AuthStore) {
         self.auth = auth
-
-        notes = []
-        tasks = []
-        reminders = []
-
-        workHours = Persistence.shared.load([WorkHourEntry].self, from: workFile, default: [])
-        goals = Persistence.shared.load([GoalItem].self, from: goalsFile, default: [])
-        habits = Persistence.shared.load([HabitItem].self, from: habitsFile, default: [])
-
-        auth.objectWillChange
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-
-        wireAutosave()
         bindAuth()
         handleAuthChange(uid: auth.currentUserId)
     }
 
     deinit {
-        notesListener?.remove()
-        tasksListener?.remove()
-        remindersListener?.remove()
+        removeAllListeners()
     }
-
-    // MARK: - Auth
 
     private func bindAuth() {
         auth.$currentUserId
-            .receive(on: RunLoop.main)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] uid in
                 self?.handleAuthChange(uid: uid)
             }
@@ -71,647 +44,678 @@ final class AppStore: ObservableObject {
     }
 
     private func handleAuthChange(uid: String?) {
-        print("APPSTORE AUTH UID:", uid ?? "nil")
-
-        notesListener?.remove()
-        notesListener = nil
-
-        tasksListener?.remove()
-        tasksListener = nil
-
-        remindersListener?.remove()
-        remindersListener = nil
-
-        notes = []
-        tasks = []
-        reminders = []
+        removeAllListeners()
 
         guard let uid, !uid.isEmpty else {
-            print("APPSTORE: No authenticated uid")
+            notes = []
+            reminders = []
+            tasks = []
+            workSessions = []
+            expenses = []
+            goalRecords = []
+            habits = []
             return
         }
 
-        ensureUserDocument(uid: uid) { [weak self] success in
-            guard let self, success else { return }
-            self.startNotesListener(for: uid)
-            self.startTasksListener(for: uid)
-            self.startRemindersListener(for: uid)
+        ensureUserDocument(uid: uid) { [weak self] ok in
+            guard let self, ok else { return }
+
+            self.startNotesListener(uid: uid)
+            self.startTasksListener(uid: uid)
+            self.startRemindersListener(uid: uid)
+            self.startWorkSessionsListener(uid: uid)
+            self.startExpensesListener(uid: uid)
+            self.startGoalsListener(uid: uid)
+            self.startHabitsListener(uid: uid)
+        }
+    }
+
+    private func removeAllListeners() {
+        notesListener?.remove()
+        tasksListener?.remove()
+        remindersListener?.remove()
+        workSessionsListener?.remove()
+        expensesListener?.remove()
+        goalsListener?.remove()
+        habitsListener?.remove()
+
+        notesListener = nil
+        tasksListener = nil
+        remindersListener = nil
+        workSessionsListener = nil
+        expensesListener = nil
+        goalsListener = nil
+        habitsListener = nil
+    }
+
+    private func ensureUserDocument(uid: String, completion: @escaping (Bool) -> Void) {
+        let payload: [String: Any] = [
+            "uid": uid,
+            "email": auth.currentEmail ?? "",
+            "updatedAt": FieldValue.serverTimestamp(),
+            "createdAt": FieldValue.serverTimestamp()
+        ]
+
+        db.collection("users").document(uid).setData(payload, merge: true) { error in
+            DispatchQueue.main.async {
+                completion(error == nil)
+            }
+
+            if let error {
+                print("ENSURE USER DOC ERROR:", error.localizedDescription)
+            }
         }
     }
 
     private func requireUID() -> String? {
         guard let uid = auth.currentUserId, !uid.isEmpty else {
-            print("APPSTORE ERROR: Missing auth.currentUserId")
+            print("APPSTORE ERROR: missing authenticated uid")
             return nil
         }
         return uid
     }
 
-    private func ensureUserDocument(uid: String, completion: ((Bool) -> Void)? = nil) {
-        let payload: [String: Any] = [
-            "uid": uid,
-            "email": auth.currentEmail ?? "",
-            "updatedAt": Timestamp(date: Date()),
-            "createdAt": FieldValue.serverTimestamp()
-        ]
-
-        db.collection("users")
-            .document(uid)
-            .setData(payload, merge: true) { error in
-                DispatchQueue.main.async {
-                    if let error = error {
-                        print("ENSURE USER DOC ERROR:", error.localizedDescription)
-                        completion?(false)
-                    } else {
-                        print("ENSURE USER DOC SUCCESS:", uid)
-                        completion?(true)
-                    }
-                }
-            }
+    private func collection(_ name: String, uid: String) -> CollectionReference {
+        db.collection("users").document(uid).collection(name)
     }
 
-    // MARK: - Notes
-
-    private func notesCollection(for uid: String) -> CollectionReference {
-        db.collection("users").document(uid).collection("notes")
+    private func document(_ name: String, uid: String, id: UUID) -> DocumentReference {
+        collection(name, uid: uid).document(id.uuidString)
     }
 
-    private func noteDocument(uid: String, noteId: UUID) -> DocumentReference {
-        notesCollection(for: uid).document(noteId.uuidString)
+    private func date(_ data: [String: Any], _ key: String, fallback: Date = Date()) -> Date {
+        if let timestamp = data[key] as? Timestamp {
+            return timestamp.dateValue()
+        }
+
+        if let date = data[key] as? Date {
+            return date
+        }
+
+        return fallback
     }
 
-    private func startNotesListener(for uid: String) {
-        notesListener?.remove()
+    // MARK: - Listeners
 
-        print("NOTES LISTENER START PATH: users/\(uid)/notes")
-
-        notesListener = notesCollection(for: uid)
+    private func startNotesListener(uid: String) {
+        notesListener = collection("notes", uid: uid)
             .order(by: "createdAt", descending: true)
             .addSnapshotListener { [weak self] snapshot, error in
-                guard let self else { return }
-
-                if let error = error {
+                if let error {
                     print("NOTES LISTENER ERROR:", error.localizedDescription)
                     return
                 }
 
-                let docs = snapshot?.documents ?? []
-                print("NOTES LISTENER DOC COUNT:", docs.count)
-
-                let items = docs.compactMap { self.makeNote(from: $0) }
+                let items = snapshot?.documents.compactMap {
+                    self?.decodeNote($0)
+                } ?? []
 
                 DispatchQueue.main.async {
-                    self.notes = items
-                    print("NOTES ARRAY UPDATED:", self.notes.map(\.title))
+                    self?.notes = items
                 }
             }
     }
 
-    private func makeNote(from document: DocumentSnapshot) -> NoteItem? {
-        let data = document.data() ?? [:]
-
-        let id = UUID(uuidString: document.documentID) ?? UUID()
-        let title = data["title"] as? String ?? ""
-        let body = data["body"] as? String ?? ""
-        let colorSeed = data["colorSeed"] as? Int ?? 0
-
-        let createdAt: Date
-        if let ts = data["createdAt"] as? Timestamp {
-            createdAt = ts.dateValue()
-        } else {
-            createdAt = Date()
-        }
-
-        return NoteItem(
-            id: id,
-            title: title,
-            body: body,
-            createdAt: createdAt,
-            colorSeed: colorSeed
-        )
-    }
-
-    private func notePayload(from note: NoteItem) -> [String: Any] {
-        [
-            "title": note.title,
-            "body": note.body,
-            "colorSeed": note.colorSeed,
-            "createdAt": Timestamp(date: note.createdAt)
-        ]
-    }
-
-    func addNote(title: String, body: String, colorSeed: Int, completion: ((String?) -> Void)? = nil) {
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !trimmedTitle.isEmpty || !trimmedBody.isEmpty else {
-            completion?("Note cannot be empty.")
-            return
-        }
-
-        guard let uid = requireUID() else {
-            completion?("You are not logged in.")
-            return
-        }
-
-        ensureUserDocument(uid: uid) { [weak self] success in
-            guard let self, success else {
-                completion?("Could not create user document.")
-                return
-            }
-
-            let note = NoteItem(
-                title: trimmedTitle.isEmpty ? "Untitled" : trimmedTitle,
-                body: trimmedBody,
-                createdAt: Date(),
-                colorSeed: colorSeed
-            )
-
-            let docRef = self.noteDocument(uid: uid, noteId: note.id)
-
-            docRef.setData(self.notePayload(from: note)) { error in
-                DispatchQueue.main.async {
-                    if let error = error {
-                        print("ADD NOTE ERROR:", error.localizedDescription)
-                        completion?(error.localizedDescription)
-                    } else {
-                        print("ADD NOTE SUCCESS:", docRef.path)
-                        completion?(nil)
-                    }
-                }
-            }
-        }
-    }
-
-    func updateNote(id: UUID, title: String, body: String, colorSeed: Int, completion: ((String?) -> Void)? = nil) {
-        guard let existing = notes.first(where: { $0.id == id }) else {
-            completion?("Note not found.")
-            return
-        }
-
-        guard let uid = requireUID() else {
-            completion?("You are not logged in.")
-            return
-        }
-
-        let updated = NoteItem(
-            id: existing.id,
-            title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled" : title.trimmingCharacters(in: .whitespacesAndNewlines),
-            body: body.trimmingCharacters(in: .whitespacesAndNewlines),
-            createdAt: existing.createdAt,
-            colorSeed: colorSeed
-        )
-
-        noteDocument(uid: uid, noteId: updated.id)
-            .setData(notePayload(from: updated)) { error in
-                DispatchQueue.main.async {
-                    if let error = error {
-                        print("UPDATE NOTE ERROR:", error.localizedDescription)
-                        completion?(error.localizedDescription)
-                    } else {
-                        completion?(nil)
-                    }
-                }
-            }
-    }
-
-    func deleteNote(_ note: NoteItem, completion: ((String?) -> Void)? = nil) {
-        guard let uid = requireUID() else {
-            completion?("You are not logged in.")
-            return
-        }
-
-        noteDocument(uid: uid, noteId: note.id)
-            .delete { error in
-                DispatchQueue.main.async {
-                    if let error = error {
-                        print("DELETE NOTE ERROR:", error.localizedDescription)
-                        completion?(error.localizedDescription)
-                    } else {
-                        completion?(nil)
-                    }
-                }
-            }
-    }
-
-    // MARK: - Tasks
-
-    private func tasksCollection(for uid: String) -> CollectionReference {
-        db.collection("users").document(uid).collection("tasks")
-    }
-
-    private func taskDocument(uid: String, taskId: UUID) -> DocumentReference {
-        tasksCollection(for: uid).document(taskId.uuidString)
-    }
-
-    private func startTasksListener(for uid: String) {
-        tasksListener?.remove()
-
-        print("TASKS LISTENER START PATH: users/\(uid)/tasks")
-
-        tasksListener = tasksCollection(for: uid)
+    private func startTasksListener(uid: String) {
+        tasksListener = collection("tasks", uid: uid)
             .order(by: "createdAt", descending: true)
             .addSnapshotListener { [weak self] snapshot, error in
-                guard let self else { return }
-
-                if let error = error {
+                if let error {
                     print("TASKS LISTENER ERROR:", error.localizedDescription)
                     return
                 }
 
-                let docs = snapshot?.documents ?? []
-                print("TASKS LISTENER DOC COUNT:", docs.count)
-
-                let items = docs.compactMap { self.makeTask(from: $0) }
+                let items = snapshot?.documents.compactMap {
+                    self?.decodeTask($0)
+                } ?? []
 
                 DispatchQueue.main.async {
-                    self.tasks = items
-                    print("TASKS ARRAY UPDATED:", self.tasks.map(\.title))
+                    self?.tasks = items
                 }
             }
     }
 
-    private func makeTask(from document: DocumentSnapshot) -> TaskItem? {
-        let data = document.data() ?? [:]
-
-        let id = UUID(uuidString: document.documentID) ?? UUID()
-        let title = data["title"] as? String ?? ""
-        let isDone = data["isDone"] as? Bool ?? false
-
-        let createdAt: Date
-        if let ts = data["createdAt"] as? Timestamp {
-            createdAt = ts.dateValue()
-        } else {
-            createdAt = Date()
-        }
-
-        return TaskItem(
-            id: id,
-            title: title,
-            isDone: isDone,
-            createdAt: createdAt
-        )
-    }
-
-    private func taskPayload(from task: TaskItem) -> [String: Any] {
-        [
-            "title": task.title,
-            "isDone": task.isDone,
-            "createdAt": Timestamp(date: task.createdAt)
-        ]
-    }
-
-    private func debugPrintAllTaskDocs(uid: String) {
-        tasksCollection(for: uid).getDocuments { snapshot, error in
-            if let error = error {
-                print("DEBUG TASK FETCH ERROR:", error.localizedDescription)
-                return
-            }
-
-            let docs = snapshot?.documents ?? []
-            print("DEBUG TASK FETCH COUNT:", docs.count)
-
-            for doc in docs {
-                print("DEBUG TASK DOC ID:", doc.documentID)
-                print("DEBUG TASK DOC DATA:", doc.data())
-            }
-        }
-    }
-
-    func addTask(title: String, completion: ((String?) -> Void)? = nil) {
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !trimmedTitle.isEmpty else {
-            completion?("Task title cannot be empty.")
-            return
-        }
-
-        guard let uid = requireUID() else {
-            completion?("You are not logged in.")
-            return
-        }
-
-        ensureUserDocument(uid: uid) { [weak self] success in
-            guard let self, success else {
-                completion?("Could not create user document.")
-                return
-            }
-
-            let task = TaskItem(
-                title: trimmedTitle,
-                isDone: false,
-                createdAt: Date()
-            )
-
-            let docRef = self.taskDocument(uid: uid, taskId: task.id)
-
-            print("ADD TASK UID:", uid)
-            print("ADD TASK TITLE:", task.title)
-            print("ADD TASK DOC PATH:", docRef.path)
-
-            docRef.setData(self.taskPayload(from: task)) { error in
-                if let error = error {
-                    DispatchQueue.main.async {
-                        print("ADD TASK ERROR:", error.localizedDescription)
-                        completion?(error.localizedDescription)
-                    }
-                    return
-                }
-
-                print("ADD TASK SUCCESS:", task.id.uuidString)
-
-                docRef.getDocument { snapshot, readError in
-                    DispatchQueue.main.async {
-                        if let readError = readError {
-                            print("ADD TASK READBACK ERROR:", readError.localizedDescription)
-                            completion?(readError.localizedDescription)
-                            return
-                        }
-
-                        print("ADD TASK READBACK EXISTS:", snapshot?.exists ?? false)
-                        print("ADD TASK READBACK DATA:", snapshot?.data() ?? [:])
-
-                        self.debugPrintAllTaskDocs(uid: uid)
-                        completion?(nil)
-                    }
-                }
-            }
-        }
-    }
-
-    func updateTask(_ task: TaskItem, completion: ((String?) -> Void)? = nil) {
-        let trimmedTitle = task.title.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard let uid = requireUID() else {
-            completion?("You are not logged in.")
-            return
-        }
-
-        let updated = TaskItem(
-            id: task.id,
-            title: trimmedTitle.isEmpty ? "Untitled Task" : trimmedTitle,
-            isDone: task.isDone,
-            createdAt: task.createdAt
-        )
-
-        taskDocument(uid: uid, taskId: updated.id)
-            .setData(taskPayload(from: updated)) { error in
-                DispatchQueue.main.async {
-                    if let error = error {
-                        print("UPDATE TASK ERROR:", error.localizedDescription)
-                        completion?(error.localizedDescription)
-                    } else {
-                        print("UPDATE TASK SUCCESS:", updated.id.uuidString)
-                        completion?(nil)
-                    }
-                }
-            }
-    }
-
-    func toggleTask(_ task: TaskItem, completion: ((String?) -> Void)? = nil) {
-        let toggled = TaskItem(
-            id: task.id,
-            title: task.title,
-            isDone: !task.isDone,
-            createdAt: task.createdAt
-        )
-        updateTask(toggled, completion: completion)
-    }
-
-    func deleteTask(_ task: TaskItem, completion: ((String?) -> Void)? = nil) {
-        guard let uid = requireUID() else {
-            completion?("You are not logged in.")
-            return
-        }
-
-        taskDocument(uid: uid, taskId: task.id)
-            .delete { error in
-                DispatchQueue.main.async {
-                    if let error = error {
-                        print("DELETE TASK ERROR:", error.localizedDescription)
-                        completion?(error.localizedDescription)
-                    } else {
-                        print("DELETE TASK SUCCESS:", task.id.uuidString)
-                        completion?(nil)
-                    }
-                }
-            }
-    }
-
-    // MARK: - Reminders
-
-    private func remindersCollection(for uid: String) -> CollectionReference {
-        db.collection("users").document(uid).collection("reminders")
-    }
-
-    private func reminderDocument(uid: String, reminderId: UUID) -> DocumentReference {
-        remindersCollection(for: uid).document(reminderId.uuidString)
-    }
-
-    private func startRemindersListener(for uid: String) {
-        remindersListener?.remove()
-
-        print("REMINDERS LISTENER START PATH: users/\(uid)/reminders")
-
-        remindersListener = remindersCollection(for: uid)
-            .order(by: "createdAt", descending: true)
+    private func startRemindersListener(uid: String) {
+        remindersListener = collection("reminders", uid: uid)
+            .order(by: "dueAt", descending: false)
             .addSnapshotListener { [weak self] snapshot, error in
-                guard let self else { return }
-
-                if let error = error {
+                if let error {
                     print("REMINDERS LISTENER ERROR:", error.localizedDescription)
                     return
                 }
 
-                let docs = snapshot?.documents ?? []
-                print("REMINDERS LISTENER DOC COUNT:", docs.count)
-
-                let items = docs.compactMap { self.makeReminder(from: $0) }
+                let items = snapshot?.documents.compactMap {
+                    self?.decodeReminder($0)
+                } ?? []
 
                 DispatchQueue.main.async {
-                    self.reminders = items
-                    print("REMINDERS ARRAY UPDATED:", self.reminders.map(\.title))
+                    self?.reminders = items
                 }
             }
     }
 
-    private func makeReminder(from document: DocumentSnapshot) -> ReminderItem? {
-        let data = document.data() ?? [:]
+    private func startWorkSessionsListener(uid: String) {
+        workSessionsListener = collection("workSessions", uid: uid)
+            .order(by: "date", descending: true)
+            .addSnapshotListener { [weak self] snapshot, error in
+                if let error {
+                    print("WORK SESSIONS LISTENER ERROR:", error.localizedDescription)
+                    return
+                }
 
-        let id = UUID(uuidString: document.documentID) ?? UUID()
-        let title = data["title"] as? String ?? ""
-        let isDone = data["isDone"] as? Bool ?? false
+                let items = snapshot?.documents.compactMap {
+                    self?.decodeWorkSession($0)
+                } ?? []
 
-        let dueAt: Date
-        if let ts = data["dueAt"] as? Timestamp {
-            dueAt = ts.dateValue()
-        } else {
-            dueAt = Date()
-        }
+                DispatchQueue.main.async {
+                    self?.workSessions = items
+                }
+            }
+    }
 
-        let createdAt: Date
-        if let ts = data["createdAt"] as? Timestamp {
-            createdAt = ts.dateValue()
-        } else {
-            createdAt = Date()
-        }
+    private func startExpensesListener(uid: String) {
+        expensesListener = collection("expenses", uid: uid)
+            .order(by: "date", descending: true)
+            .addSnapshotListener { [weak self] snapshot, error in
+                if let error {
+                    print("EXPENSES LISTENER ERROR:", error.localizedDescription)
+                    return
+                }
 
-        return ReminderItem(
-            id: id,
-            title: title,
-            dueAt: dueAt,
-            isDone: isDone,
-            createdAt: createdAt
+                let items = snapshot?.documents.compactMap {
+                    self?.decodeExpense($0)
+                } ?? []
+
+                DispatchQueue.main.async {
+                    self?.expenses = items
+                }
+            }
+    }
+
+    private func startGoalsListener(uid: String) {
+        goalsListener = collection("goals", uid: uid)
+            .order(by: "targetDate", descending: false)
+            .addSnapshotListener { [weak self] snapshot, error in
+                if let error {
+                    print("GOALS LISTENER ERROR:", error.localizedDescription)
+                    return
+                }
+
+                let items = snapshot?.documents.compactMap {
+                    self?.decodeGoal($0)
+                } ?? []
+
+                DispatchQueue.main.async {
+                    self?.goalRecords = items
+                }
+            }
+    }
+
+    private func startHabitsListener(uid: String) {
+        habitsListener = collection("habits", uid: uid)
+            .order(by: "createdAt", descending: true)
+            .addSnapshotListener { [weak self] snapshot, error in
+                if let error {
+                    print("HABITS LISTENER ERROR:", error.localizedDescription)
+                    return
+                }
+
+                let items = snapshot?.documents.compactMap {
+                    self?.decodeHabit($0)
+                } ?? []
+
+                DispatchQueue.main.async {
+                    self?.habits = items
+                }
+            }
+    }
+
+    // MARK: - Decode
+
+    private func decodeNote(_ doc: DocumentSnapshot) -> NoteItem? {
+        let data = doc.data() ?? [:]
+
+        return NoteItem(
+            id: UUID(uuidString: doc.documentID) ?? UUID(),
+            title: data["title"] as? String ?? "",
+            body: data["body"] as? String ?? "",
+            createdAt: date(data, "createdAt"),
+            colorSeed: data["colorSeed"] as? Int ?? 0
         )
     }
 
-    private func reminderPayload(from reminder: ReminderItem) -> [String: Any] {
-        [
+    private func decodeTask(_ doc: DocumentSnapshot) -> TaskItem? {
+        let data = doc.data() ?? [:]
+
+        return TaskItem(
+            id: UUID(uuidString: doc.documentID) ?? UUID(),
+            title: data["title"] as? String ?? "",
+            isDone: data["isDone"] as? Bool ?? false,
+            createdAt: date(data, "createdAt")
+        )
+    }
+
+    private func decodeReminder(_ doc: DocumentSnapshot) -> ReminderItem? {
+        let data = doc.data() ?? [:]
+
+        return ReminderItem(
+            id: UUID(uuidString: doc.documentID) ?? UUID(),
+            title: data["title"] as? String ?? "",
+            dueAt: date(data, "dueAt"),
+            isDone: data["isDone"] as? Bool ?? false,
+            createdAt: date(data, "createdAt")
+        )
+    }
+
+    private func decodeWorkSession(_ doc: DocumentSnapshot) -> WorkSessionRecord? {
+        let data = doc.data() ?? [:]
+
+        return WorkSessionRecord(
+            id: UUID(uuidString: doc.documentID) ?? UUID(),
+            date: date(data, "date"),
+            startTime: date(data, "startTime"),
+            endTime: date(data, "endTime"),
+            hourlyPay: data["hourlyPay"] as? Double ?? 0,
+            notes: data["notes"] as? String ?? ""
+        )
+    }
+
+    private func decodeExpense(_ doc: DocumentSnapshot) -> ExpenseRecord? {
+        let data = doc.data() ?? [:]
+        let rawType = data["type"] as? String ?? ExpenseType.other.rawValue
+
+        return ExpenseRecord(
+            id: UUID(uuidString: doc.documentID) ?? UUID(),
+            date: date(data, "date"),
+            name: data["name"] as? String ?? "Expense",
+            type: ExpenseType(rawValue: rawType) ?? .other,
+            whereUsed: data["whereUsed"] as? String ?? "",
+            amount: data["amount"] as? Double ?? 0
+        )
+    }
+
+    private func decodeGoal(_ doc: DocumentSnapshot) -> GoalRecord? {
+        let data = doc.data() ?? [:]
+
+        return GoalRecord(
+            id: UUID(uuidString: doc.documentID) ?? UUID(),
+            goalName: data["goalName"] as? String ?? "",
+            goalDescription: data["goalDescription"] as? String ?? "",
+            targetDate: date(data, "targetDate")
+        )
+    }
+
+    private func decodeHabit(_ doc: DocumentSnapshot) -> HabitItem? {
+        let data = doc.data() ?? [:]
+        let lastCompleted = (data["lastCompleted"] as? Timestamp)?.dateValue()
+
+        return HabitItem(
+            id: UUID(uuidString: doc.documentID) ?? UUID(),
+            title: data["title"] as? String ?? "",
+            streak: data["streak"] as? Int ?? 0,
+            lastCompleted: lastCompleted,
+            createdAt: date(data, "createdAt"),
+            isCompletedToday: data["isCompletedToday"] as? Bool ?? false
+        )
+    }
+
+    // MARK: - Notes
+
+    func addNote(title: String, body: String, colorSeed: Int = Int.random(in: 0...5), completion: ((Bool) -> Void)? = nil) {
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleanTitle.isEmpty || !cleanBody.isEmpty, let uid = requireUID() else {
+            completion?(false)
+            return
+        }
+
+        let note = NoteItem(
+            title: cleanTitle.isEmpty ? "Untitled" : cleanTitle,
+            body: cleanBody,
+            createdAt: Date(),
+            colorSeed: colorSeed
+        )
+
+        document("notes", uid: uid, id: note.id).setData([
+            "title": note.title,
+            "body": note.body,
+            "colorSeed": note.colorSeed,
+            "createdAt": Timestamp(date: note.createdAt)
+        ]) { error in
+            DispatchQueue.main.async {
+                completion?(error == nil)
+            }
+        }
+    }
+
+    func updateNote(_ note: NoteItem, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = requireUID() else {
+            completion?(false)
+            return
+        }
+
+        document("notes", uid: uid, id: note.id).setData([
+            "title": note.title,
+            "body": note.body,
+            "colorSeed": note.colorSeed,
+            "createdAt": Timestamp(date: note.createdAt)
+        ], merge: true) { error in
+            DispatchQueue.main.async {
+                completion?(error == nil)
+            }
+        }
+    }
+
+    func deleteNote(_ note: NoteItem, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = requireUID() else {
+            completion?(false)
+            return
+        }
+
+        document("notes", uid: uid, id: note.id).delete { error in
+            DispatchQueue.main.async {
+                completion?(error == nil)
+            }
+        }
+    }
+
+    // MARK: - Tasks
+
+    func addTask(title: String, completion: ((Bool) -> Void)? = nil) {
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleanTitle.isEmpty, let uid = requireUID() else {
+            completion?(false)
+            return
+        }
+
+        let task = TaskItem(title: cleanTitle, isDone: false, createdAt: Date())
+
+        document("tasks", uid: uid, id: task.id).setData([
+            "title": task.title,
+            "isDone": task.isDone,
+            "createdAt": Timestamp(date: task.createdAt)
+        ]) { error in
+            DispatchQueue.main.async {
+                completion?(error == nil)
+            }
+        }
+    }
+
+    func updateTask(_ task: TaskItem, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = requireUID() else {
+            completion?(false)
+            return
+        }
+
+        document("tasks", uid: uid, id: task.id).setData([
+            "title": task.title,
+            "isDone": task.isDone,
+            "createdAt": Timestamp(date: task.createdAt)
+        ], merge: true) { error in
+            DispatchQueue.main.async {
+                completion?(error == nil)
+            }
+        }
+    }
+
+    func toggleTask(_ task: TaskItem, completion: ((Bool) -> Void)? = nil) {
+        var updatedTask = task
+        updatedTask.isDone.toggle()
+        updateTask(updatedTask, completion: completion)
+    }
+
+    func deleteTask(_ task: TaskItem, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = requireUID() else {
+            completion?(false)
+            return
+        }
+
+        document("tasks", uid: uid, id: task.id).delete { error in
+            DispatchQueue.main.async {
+                completion?(error == nil)
+            }
+        }
+    }
+
+    // MARK: - Reminders
+
+    func addReminder(title: String, dueAt: Date, completion: ((Bool) -> Void)? = nil) {
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleanTitle.isEmpty, let uid = requireUID() else {
+            completion?(false)
+            return
+        }
+
+        let reminder = ReminderItem(
+            title: cleanTitle,
+            dueAt: dueAt,
+            isDone: false,
+            createdAt: Date()
+        )
+
+        document("reminders", uid: uid, id: reminder.id).setData([
             "title": reminder.title,
             "dueAt": Timestamp(date: reminder.dueAt),
             "isDone": reminder.isDone,
             "createdAt": Timestamp(date: reminder.createdAt)
+        ]) { error in
+            DispatchQueue.main.async {
+                completion?(error == nil)
+            }
+        }
+    }
+
+    func updateReminder(_ reminder: ReminderItem, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = requireUID() else {
+            completion?(false)
+            return
+        }
+
+        document("reminders", uid: uid, id: reminder.id).setData([
+            "title": reminder.title,
+            "dueAt": Timestamp(date: reminder.dueAt),
+            "isDone": reminder.isDone,
+            "createdAt": Timestamp(date: reminder.createdAt)
+        ], merge: true) { error in
+            DispatchQueue.main.async {
+                completion?(error == nil)
+            }
+        }
+    }
+
+    func toggleReminder(_ reminder: ReminderItem, completion: ((Bool) -> Void)? = nil) {
+        var updatedReminder = reminder
+        updatedReminder.isDone.toggle()
+        updateReminder(updatedReminder, completion: completion)
+    }
+
+    func deleteReminder(_ reminder: ReminderItem, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = requireUID() else {
+            completion?(false)
+            return
+        }
+
+        document("reminders", uid: uid, id: reminder.id).delete { error in
+            DispatchQueue.main.async {
+                completion?(error == nil)
+            }
+        }
+    }
+
+    // MARK: - Work Hours
+
+    func addWorkSession(_ session: WorkSessionRecord, completion: ((String?) -> Void)? = nil) {
+        guard let uid = requireUID() else {
+            completion?("No authenticated user")
+            return
+        }
+
+        document("workSessions", uid: uid, id: session.id).setData([
+            "date": Timestamp(date: session.date),
+            "startTime": Timestamp(date: session.startTime),
+            "endTime": Timestamp(date: session.endTime),
+            "hourlyPay": session.hourlyPay,
+            "notes": session.notes
+        ]) { error in
+            DispatchQueue.main.async {
+                completion?(error?.localizedDescription)
+            }
+        }
+    }
+
+    func deleteWorkSession(_ session: WorkSessionRecord, completion: ((String?) -> Void)? = nil) {
+        guard let uid = requireUID() else {
+            completion?("No authenticated user")
+            return
+        }
+
+        document("workSessions", uid: uid, id: session.id).delete { error in
+            DispatchQueue.main.async {
+                completion?(error?.localizedDescription)
+            }
+        }
+    }
+
+    // MARK: - Expenses
+
+    func addExpense(_ expense: ExpenseRecord, completion: ((String?) -> Void)? = nil) {
+        guard let uid = requireUID() else {
+            completion?("No authenticated user")
+            return
+        }
+
+        document("expenses", uid: uid, id: expense.id).setData([
+            "date": Timestamp(date: expense.date),
+            "name": expense.name,
+            "type": expense.type.rawValue,
+            "whereUsed": expense.whereUsed,
+            "amount": expense.amount
+        ]) { error in
+            DispatchQueue.main.async {
+                completion?(error?.localizedDescription)
+            }
+        }
+    }
+
+    func deleteExpense(_ expense: ExpenseRecord, completion: ((String?) -> Void)? = nil) {
+        guard let uid = requireUID() else {
+            completion?("No authenticated user")
+            return
+        }
+
+        document("expenses", uid: uid, id: expense.id).delete { error in
+            DispatchQueue.main.async {
+                completion?(error?.localizedDescription)
+            }
+        }
+    }
+
+    // MARK: - Goals
+
+    func addGoalRecord(_ goal: GoalRecord, completion: ((String?) -> Void)? = nil) {
+        guard let uid = requireUID() else {
+            completion?("No authenticated user")
+            return
+        }
+
+        document("goals", uid: uid, id: goal.id).setData([
+            "goalName": goal.goalName,
+            "goalDescription": goal.goalDescription,
+            "targetDate": Timestamp(date: goal.targetDate)
+        ]) { error in
+            DispatchQueue.main.async {
+                completion?(error?.localizedDescription)
+            }
+        }
+    }
+
+    func updateGoalRecord(_ goal: GoalRecord, completion: ((String?) -> Void)? = nil) {
+        addGoalRecord(goal, completion: completion)
+    }
+
+    func deleteGoalRecord(_ goal: GoalRecord, completion: ((String?) -> Void)? = nil) {
+        guard let uid = requireUID() else {
+            completion?("No authenticated user")
+            return
+        }
+
+        document("goals", uid: uid, id: goal.id).delete { error in
+            DispatchQueue.main.async {
+                completion?(error?.localizedDescription)
+            }
+        }
+    }
+
+    // MARK: - Habits
+
+    func addHabit(title: String, completion: ((String?) -> Void)? = nil) {
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleanTitle.isEmpty, let uid = requireUID() else {
+            completion?("Missing habit title or user")
+            return
+        }
+
+        let habit = HabitItem(
+            title: cleanTitle,
+            streak: 0,
+            lastCompleted: nil,
+            createdAt: Date(),
+            isCompletedToday: false
+        )
+
+        setHabit(habit, uid: uid, completion: completion)
+    }
+
+    func updateHabit(_ habit: HabitItem, completion: ((String?) -> Void)? = nil) {
+        guard let uid = requireUID() else {
+            completion?("No authenticated user")
+            return
+        }
+
+        setHabit(habit, uid: uid, completion: completion)
+    }
+
+    private func setHabit(_ habit: HabitItem, uid: String, completion: ((String?) -> Void)?) {
+        var payload: [String: Any] = [
+            "title": habit.title,
+            "streak": habit.streak,
+            "createdAt": Timestamp(date: habit.createdAt),
+            "isCompletedToday": habit.isCompletedToday
         ]
-    }
 
-    func addReminder(title: String, dueAt: Date, completion: ((String?) -> Void)? = nil) {
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !trimmedTitle.isEmpty else {
-            completion?("Reminder title cannot be empty.")
-            return
+        if let lastCompleted = habit.lastCompleted {
+            payload["lastCompleted"] = Timestamp(date: lastCompleted)
+        } else {
+            payload["lastCompleted"] = FieldValue.delete()
         }
 
+        document("habits", uid: uid, id: habit.id).setData(payload, merge: true) { error in
+            DispatchQueue.main.async {
+                completion?(error?.localizedDescription)
+            }
+        }
+    }
+
+    func deleteHabit(_ habit: HabitItem, completion: ((String?) -> Void)? = nil) {
         guard let uid = requireUID() else {
-            completion?("You are not logged in.")
+            completion?("No authenticated user")
             return
         }
 
-        ensureUserDocument(uid: uid) { [weak self] success in
-            guard let self, success else {
-                completion?("Could not create user document.")
-                return
-            }
-
-            let reminder = ReminderItem(
-                title: trimmedTitle,
-                dueAt: dueAt,
-                isDone: false,
-                createdAt: Date()
-            )
-
-            let docRef = self.reminderDocument(uid: uid, reminderId: reminder.id)
-
-            docRef.setData(self.reminderPayload(from: reminder)) { error in
-                DispatchQueue.main.async {
-                    if let error = error {
-                        print("ADD REMINDER ERROR:", error.localizedDescription)
-                        completion?(error.localizedDescription)
-                    } else {
-                        print("ADD REMINDER SUCCESS:", docRef.path)
-                        completion?(nil)
-                    }
-                }
+        document("habits", uid: uid, id: habit.id).delete { error in
+            DispatchQueue.main.async {
+                completion?(error?.localizedDescription)
             }
         }
-    }
-
-    func updateReminder(_ reminder: ReminderItem, completion: ((String?) -> Void)? = nil) {
-        let trimmedTitle = reminder.title.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard let uid = requireUID() else {
-            completion?("You are not logged in.")
-            return
-        }
-
-        let updated = ReminderItem(
-            id: reminder.id,
-            title: trimmedTitle.isEmpty ? "Untitled Reminder" : trimmedTitle,
-            dueAt: reminder.dueAt,
-            isDone: reminder.isDone,
-            createdAt: reminder.createdAt
-        )
-
-        reminderDocument(uid: uid, reminderId: updated.id)
-            .setData(reminderPayload(from: updated)) { error in
-                DispatchQueue.main.async {
-                    if let error = error {
-                        print("UPDATE REMINDER ERROR:", error.localizedDescription)
-                        completion?(error.localizedDescription)
-                    } else {
-                        completion?(nil)
-                    }
-                }
-            }
-    }
-
-    func toggleReminder(_ reminder: ReminderItem, completion: ((String?) -> Void)? = nil) {
-        let toggled = ReminderItem(
-            id: reminder.id,
-            title: reminder.title,
-            dueAt: reminder.dueAt,
-            isDone: !reminder.isDone,
-            createdAt: reminder.createdAt
-        )
-        updateReminder(toggled, completion: completion)
-    }
-
-    func deleteReminder(_ reminder: ReminderItem, completion: ((String?) -> Void)? = nil) {
-        guard let uid = requireUID() else {
-            completion?("You are not logged in.")
-            return
-        }
-
-        reminderDocument(uid: uid, reminderId: reminder.id)
-            .delete { error in
-                DispatchQueue.main.async {
-                    if let error = error {
-                        print("DELETE REMINDER ERROR:", error.localizedDescription)
-                        completion?(error.localizedDescription)
-                    } else {
-                        completion?(nil)
-                    }
-                }
-            }
-    }
-
-    // MARK: - Local Only
-
-    private func wireAutosave() {
-        $workHours
-            .dropFirst()
-            .debounce(for: .milliseconds(350), scheduler: RunLoop.main)
-            .sink { [weak self] _ in self?.saveWorkHours() }
-            .store(in: &cancellables)
-
-        $goals
-            .dropFirst()
-            .debounce(for: .milliseconds(350), scheduler: RunLoop.main)
-            .sink { [weak self] _ in self?.saveGoals() }
-            .store(in: &cancellables)
-
-        $habits
-            .dropFirst()
-            .debounce(for: .milliseconds(350), scheduler: RunLoop.main)
-            .sink { [weak self] _ in self?.saveHabits() }
-            .store(in: &cancellables)
     }
 
     func saveAll() {
-        saveWorkHours()
-        saveGoals()
-        saveHabits()
-    }
-
-    private func saveWorkHours() {
-        Persistence.shared.save(workHours, as: workFile)
-    }
-
-    private func saveGoals() {
-        Persistence.shared.save(goals, as: goalsFile)
-    }
-
-    private func saveHabits() {
-        Persistence.shared.save(habits, as: habitsFile)
+        for habit in habits {
+            updateHabit(habit)
+        }
     }
 }

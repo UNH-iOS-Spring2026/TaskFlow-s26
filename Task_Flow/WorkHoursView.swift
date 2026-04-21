@@ -1,14 +1,13 @@
 import SwiftUI
 
 struct WorkHoursView: View {
+    @EnvironmentObject var store: AppStore
+
     @State private var tab: WorkTab = .sessions
     @State private var periodMode: PeriodMode = .monthly
     @State private var selectedMonth: Int = Calendar.current.component(.month, from: Date()) - 1
     @State private var selectedYear: Int = Calendar.current.component(.year, from: Date())
     @State private var searchText: String = ""
-
-    @State private var sessions: [WorkSessionRecord] = []
-    @State private var expenses: [ExpenseRecord] = []
 
     // Work session form
     @State private var wsDate: Date = Date()
@@ -23,18 +22,13 @@ struct WorkHoursView: View {
     @State private var exType: ExpenseType = .food
     @State private var exWhere: String = ""
     @State private var exAmount: String = ""
-    
-    
 
     private let monthNames = Calendar.current.monthSymbols
-    private let sessionsKey = "taskflow_work_sessions_v1"
-    private let expensesKey = "taskflow_work_expenses_v1"
 
     var body: some View {
         NavigationStack {
             ZStack {
                 background
-                
 
                 ScrollView {
                     VStack(spacing: 18) {
@@ -51,13 +45,8 @@ struct WorkHoursView: View {
                 }
             }
             .navigationBarHidden(true)
-            .onAppear {
-                loadData()
-            }
         }
     }
-
-    // MARK: - UI
 
     private var heroSection: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -310,8 +299,6 @@ struct WorkHoursView: View {
         }
     }
 
-    // MARK: - Small UI helpers
-
     private func periodButton(_ title: String, mode: PeriodMode) -> some View {
         Button {
             periodMode = mode
@@ -482,7 +469,7 @@ struct WorkHoursView: View {
             }
 
             Button(role: .destructive) {
-                deleteSession(session)
+                store.deleteWorkSession(session)
             } label: {
                 Text("Delete")
                     .font(.subheadline.weight(.bold))
@@ -517,7 +504,7 @@ struct WorkHoursView: View {
                 .foregroundStyle(Color.black.opacity(0.64))
 
             Button(role: .destructive) {
-                deleteExpense(expense)
+                store.deleteExpense(expense)
             } label: {
                 Text("Delete")
                     .font(.subheadline.weight(.bold))
@@ -555,7 +542,13 @@ struct WorkHoursView: View {
         .ignoresSafeArea()
     }
 
-    // MARK: - Derived values
+    private var sessions: [WorkSessionRecord] {
+        store.workSessions
+    }
+
+    private var expenses: [ExpenseRecord] {
+        store.expenses
+    }
 
     private var availableYears: [Int] {
         let sessionYears = sessions.map { Calendar.current.component(.year, from: $0.date) }
@@ -620,8 +613,6 @@ struct WorkHoursView: View {
         periodLabel(mode: periodMode, month: selectedMonth, year: selectedYear)
     }
 
-    // MARK: - Actions
-
     private func addWorkSession() {
         guard wsHours > 0 else { return }
 
@@ -635,11 +626,10 @@ struct WorkHoursView: View {
             startTime: start,
             endTime: end,
             hourlyPay: rate,
-            notes: wsNotes
+            notes: wsNotes.trimmingCharacters(in: .whitespacesAndNewlines)
         )
 
-        sessions.insert(entry, at: 0)
-        saveSessions()
+        store.addWorkSession(entry)
 
         wsRate = ""
         wsNotes = ""
@@ -647,63 +637,27 @@ struct WorkHoursView: View {
         wsEnd = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date()
     }
 
-    private func deleteSession(_ session: WorkSessionRecord) {
-        sessions.removeAll { $0.id == session.id }
-        saveSessions()
-    }
-
     private func addExpense() {
         guard let amount = Double(exAmount), amount > 0 else { return }
 
+        let cleanName = exName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanWhere = exWhere.trimmingCharacters(in: .whitespacesAndNewlines)
+
         let entry = ExpenseRecord(
             date: exDate,
-            name: exName.isEmpty ? "Expense" : exName,
+            name: cleanName.isEmpty ? "Expense" : cleanName,
             type: exType,
-            whereUsed: exWhere,
+            whereUsed: cleanWhere,
             amount: amount
         )
 
-        expenses.insert(entry, at: 0)
-        saveExpenses()
+        store.addExpense(entry)
 
         exName = ""
         exWhere = ""
         exAmount = ""
         exType = .food
     }
-
-    private func deleteExpense(_ expense: ExpenseRecord) {
-        expenses.removeAll { $0.id == expense.id }
-        saveExpenses()
-    }
-
-    // MARK: - Persistence
-
-    private func loadData() {
-        if let data = UserDefaults.standard.data(forKey: sessionsKey),
-           let decoded = try? JSONDecoder().decode([WorkSessionRecord].self, from: data) {
-            sessions = decoded
-        }
-
-        if let data = UserDefaults.standard.data(forKey: expensesKey),
-           let decoded = try? JSONDecoder().decode([ExpenseRecord].self, from: data) {
-            expenses = decoded
-        }
-    }
-
-    private func saveSessions() {
-        if let data = try? JSONEncoder().encode(sessions) {
-            UserDefaults.standard.set(data, forKey: sessionsKey)
-        }
-    }
-
-    private func saveExpenses() {
-        if let data = try? JSONEncoder().encode(expenses) {
-            UserDefaults.standard.set(data, forKey: expensesKey)
-        }
-    }
-
-    // MARK: - Logic
 
     private func diffHours(start: Date, end: Date) -> Double {
         let startMinutes = Calendar.current.component(.hour, from: start) * 60
@@ -817,70 +771,4 @@ struct WorkHoursView: View {
     private func shortHours(_ value: Double) -> String {
         "\(String(format: "%.2f", value))h"
     }
-}
-
-// MARK: - Local models
-
-enum WorkTab {
-    case sessions
-    case expenses
-
-    var title: String {
-        switch self {
-        case .sessions: return "Sessions"
-        case .expenses: return "Expenses"
-        }
-    }
-}
-
-enum PeriodMode {
-    case monthly
-    case yearly
-}
-
-enum ExpenseType: String, CaseIterable, Codable {
-    case food = "Food"
-    case transport = "Transport"
-    case bills = "Bills"
-    case shopping = "Shopping"
-    case health = "Health"
-    case entertainment = "Entertainment"
-    case other = "Other"
-}
-
-struct WorkSessionRecord: Identifiable, Codable {
-    var id = UUID()
-    var date: Date
-    var startTime: Date
-    var endTime: Date
-    var hourlyPay: Double
-    var notes: String
-
-    var hours: Double {
-        max(0, endTime.timeIntervalSince(startTime) / 3600)
-    }
-
-    var earnings: Double {
-        hours * hourlyPay
-    }
-}
-
-struct ExpenseRecord: Identifiable, Codable {
-    var id = UUID()
-    var date: Date
-    var name: String
-    var type: ExpenseType
-    var whereUsed: String
-    var amount: Double
-}
-
-struct WorkStats {
-    var totalHours: Double
-    var totalEarnings: Double
-    var totalSessions: Int
-    var avgDailyHours: Double
-    var earningsPerHour: Double
-    var daysWorked: Int
-    var busiestDay: String
-    var busiestDayHours: Double
 }

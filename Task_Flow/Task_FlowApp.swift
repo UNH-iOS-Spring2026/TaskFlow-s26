@@ -5,16 +5,17 @@ import FirebaseCore
 struct Task_FlowApp: App {
     @StateObject private var auth: AuthStore
     @StateObject private var store: AppStore
-    @AppStorage("tf_dark_mode") private var darkMode = false
 
     init() {
         if FirebaseApp.app() == nil {
             FirebaseApp.configure()
         }
 
-        let sharedAuth = AuthStore()
-        _auth = StateObject(wrappedValue: sharedAuth)
-        _store = StateObject(wrappedValue: AppStore(auth: sharedAuth))
+        let authStore = AuthStore()
+        let appStore = AppStore(auth: authStore)
+
+        _auth = StateObject(wrappedValue: authStore)
+        _store = StateObject(wrappedValue: appStore)
     }
 
     var body: some Scene {
@@ -22,7 +23,6 @@ struct Task_FlowApp: App {
             RootView()
                 .environmentObject(auth)
                 .environmentObject(store)
-                .preferredColorScheme(darkMode ? .dark : .light)
         }
     }
 }

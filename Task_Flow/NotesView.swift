@@ -1,79 +1,82 @@
-//
-//  NotesView.swift
-//  Task_Flow
-//
-
 import SwiftUI
 
 struct NotesView: View {
     @EnvironmentObject var store: AppStore
 
-    @State private var showAdd = false
     @State private var searchText = ""
-    @State private var selectedNoteID: UUID? = nil
+    @State private var showAddNoteSheet = false
+
+    private var filteredNotes: [NoteItem] {
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return store.notes }
+
+        return store.notes.filter {
+            $0.title.localizedCaseInsensitiveContains(q) ||
+            $0.body.localizedCaseInsensitiveContains(q)
+        }
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 background
 
-                ScrollView {
-                    VStack(spacing: 14) {
-                        header
+                VStack(spacing: 14) {
+                    topBar
 
-                        Button {
-                            showAdd = true
-                        } label: {
-                            Text("+ Create Note")
-                                .font(.headline.weight(.semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Color.purple.opacity(0.9))
-
-                        HStack {
-                            Text("Your Notes (\(filteredNotes.count))")
-                                .font(.title3.weight(.bold))
-                                .foregroundStyle(.white.opacity(0.9))
-                            Spacer()
-                        }
-                        .padding(.top, 6)
-
-                        if filteredNotes.isEmpty {
-                            emptyState
-                        } else {
+                    if filteredNotes.isEmpty {
+                        emptyState
+                    } else {
+                        ScrollView {
                             LazyVStack(spacing: 12) {
                                 ForEach(filteredNotes) { note in
-                                    NoteCard(
-                                        note: note,
-                                        onOpen: { selectedNoteID = note.id },
-                                        onDelete: { deleteNote(note) }
-                                    )
+                                    NavigationLink {
+                                        NoteDetailView(noteID: note.id)
+                                            .environmentObject(store)
+                                    } label: {
+                                        noteCard(note)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
+                            .padding(.top, 4)
+                            .padding(.bottom, 100)
                         }
                     }
-                    .padding(.horizontal)
-                    .padding(.top, 10)
                 }
-                .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 110) }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button {
+                            showAddNoteSheet = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 22, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 58, height: 58)
+                                .background(
+                                    LinearGradient(
+                                        colors: [.purple, .pink],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .clipShape(Circle())
+                                .shadow(color: .purple.opacity(0.35), radius: 12, x: 0, y: 8)
+                        }
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 24)
+                    }
+                }
             }
             .navigationBarHidden(true)
-            .fullScreenCover(isPresented: $showAdd) {
+            .sheet(isPresented: $showAddNoteSheet) {
                 AddNoteSheetModern()
                     .environmentObject(store)
-            }
-            .fullScreenCover(
-                isPresented: Binding(
-                    get: { selectedNoteID != nil },
-                    set: { if !$0 { selectedNoteID = nil } }
-                )
-            ) {
-                if let id = selectedNoteID {
-                    NoteDetailView(noteID: id)
-                        .environmentObject(store)
-                }
             }
         }
     }
@@ -81,8 +84,8 @@ struct NotesView: View {
     private var background: some View {
         LinearGradient(
             colors: [
-                Color(red: 0.06, green: 0.07, blue: 0.12),
-                Color(red: 0.10, green: 0.10, blue: 0.18),
+                Color.black,
+                Color(red: 8/255, green: 12/255, blue: 42/255),
                 Color.black
             ],
             startPoint: .topLeading,
@@ -91,158 +94,87 @@ struct NotesView: View {
         .ignoresSafeArea()
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Notes")
-                        .font(.system(size: 34, weight: .bold))
-                        .foregroundStyle(.white)
-                    Text("Create and manage your notes")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.7))
-                }
-
-                Spacer()
-
-                Button { showAdd = true } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(12)
-                        .background(Color.white.opacity(0.10))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
+    private var topBar: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Notes")
+                .font(.system(size: 30, weight: .bold))
+                .foregroundColor(.white)
 
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.white.opacity(0.65))
+                    .foregroundColor(.white.opacity(0.65))
+
                 TextField("Search notes...", text: $searchText)
-                    .foregroundStyle(.white)
+                    .foregroundColor(.white)
+                    .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .background(Color.white.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
 
     private var emptyState: some View {
-        VStack(spacing: 10) {
-            Text("No notes yet.")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.9))
-            Text("Create your first note to capture ideas, tasks, and reminders.")
+        VStack(spacing: 14) {
+            Spacer()
+
+            Image(systemName: "note.text")
+                .font(.system(size: 46))
+                .foregroundColor(.white.opacity(0.65))
+
+            Text("No notes yet")
+                .font(.title3.bold())
+                .foregroundColor(.white)
+
+            Text("Tap the plus button to create your first note.")
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.65))
+                .foregroundColor(.white.opacity(0.72))
                 .multilineTextAlignment(.center)
+
+            Spacer()
         }
-        .padding(18)
         .frame(maxWidth: .infinity)
-        .background(Color.white.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
-    private var sortedNotes: [NoteItem] {
-        store.notes.sorted(by: { $0.createdAt > $1.createdAt })
-    }
+    private func noteCard(_ note: NoteItem) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                Circle()
+                    .fill(colorForSeed(note.colorSeed))
+                    .frame(width: 10, height: 10)
+                    .padding(.top, 6)
 
-    private var filteredNotes: [NoteItem] {
-        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !q.isEmpty else { return sortedNotes }
-        return sortedNotes.filter {
-            $0.title.lowercased().contains(q) || $0.body.lowercased().contains(q)
-        }
-    }
-
-    private func deleteNote(_ note: NoteItem) {
-        store.deleteNote(note)
-    }
-}
-
-// MARK: - Note Card
-
-private struct NoteCard: View {
-    let note: NoteItem
-    let onOpen: () -> Void
-    let onDelete: () -> Void
-
-    var body: some View {
-        let c = NoteColors.color(for: note.colorSeed)
-        let title = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let body = note.body.trimmingCharacters(in: .whitespacesAndNewlines)
-        let firstLetter = String((title.isEmpty ? "U" : title.prefix(1))).uppercased()
-
-        Button {
-            onOpen()
-        } label: {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(c)
-                    .frame(width: 10)
-
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(c.opacity(0.28))
-                    .frame(width: 44, height: 44)
-                    .overlay(
-                        Text(firstLetter)
-                            .font(.headline.weight(.bold))
-                            .foregroundStyle(.white)
-                    )
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(title.isEmpty ? "Untitled" : title)
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(.white)
-
-                    Text(body.isEmpty ? "No content" : body)
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.70))
-                        .lineLimit(2)
-
-                    Text(note.createdAt.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.55))
-                }
+                Text(note.title.isEmpty ? "Untitled" : note.title)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .lineLimit(1)
 
                 Spacer()
 
-                Button {
-                    onDelete()
-                } label: {
-                    Image(systemName: "trash")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.red)
-                        .padding(10)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Delete note")
+                Text(note.createdAt.formatted(date: .abbreviated, time: .omitted))
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.55))
             }
-            .padding(14)
-            .frame(maxWidth: .infinity)
-            .background(Color.white.opacity(0.06))
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(c.opacity(0.55), lineWidth: 1.4)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+            Text(note.body.isEmpty ? "No content" : note.body)
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.78))
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
         }
-        .buttonStyle(.plain)
-        .contextMenu {
-            Button(role: .destructive) { onDelete() } label: {
-                Label("Delete", systemImage: "trash")
-            }
-        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func colorForSeed(_ seed: Int) -> Color {
+        let palette: [Color] = [.pink, .purple, .blue, .green, .orange, .yellow, .mint, .teal]
+        return palette[abs(seed) % palette.count]
     }
 }
-
-// MARK: - Add Note
 
 struct AddNoteSheetModern: View {
     @EnvironmentObject var store: AppStore
@@ -250,131 +182,54 @@ struct AddNoteSheetModern: View {
 
     @State private var title = ""
     @State private var bodyText = ""
-    @State private var selectedSeed: Int = 2
     @State private var errorText: String?
-
-    private let seeds: [Int] = [0, 1, 2, 3, 4, 5]
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    HStack {
-                        Text("Create New Note")
-                            .font(.title2.weight(.bold))
-                        Spacer()
-                        Button { dismiss() } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(.secondary)
-                                .padding(10)
-                                .background(Color.black.opacity(0.06))
-                                .clipShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.top, 6)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Title").font(.headline)
-                        TextField("Note title...", text: $title)
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Content").font(.headline)
-                        TextEditor(text: $bodyText)
-                            .frame(height: 260)
-                            .padding(10)
-                            .background(Color.black.opacity(0.06))
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Color").font(.headline)
-
-                        HStack(spacing: 12) {
-                            ForEach(seeds, id: \.self) { s in
-                                let isSelected = (s == selectedSeed)
-
-                                ZStack {
-                                    Circle()
-                                        .fill(NoteColors.color(for: s))
-                                        .frame(width: 32, height: 32)
-
-                                    if isSelected {
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundStyle(.black.opacity(0.65))
-                                    }
-                                }
-                                .overlay(
-                                    Circle()
-                                        .stroke(
-                                            isSelected ? Color.purple : Color.black.opacity(0.15),
-                                            lineWidth: isSelected ? 3 : 1
-                                        )
-                                )
-                                .contentShape(Circle())
-                                .onTapGesture {
-                                    selectedSeed = s
-                                }
-                            }
-                        }
-
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(NoteColors.color(for: selectedSeed).opacity(0.28))
-                            .frame(height: 46)
-                            .overlay(
-                                Text("Selected color preview")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.black.opacity(0.60))
-                            )
-                            .padding(.top, 6)
-                    }
-
-                    if let errorText {
-                        Text(errorText)
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.red)
-                    }
-
-                    HStack(spacing: 12) {
-                        Button {
-                            store.addNote(title: title, body: bodyText, colorSeed: selectedSeed) { error in
-                                if let error {
-                                    errorText = error
-                                } else {
-                                    dismiss()
-                                }
-                            }
-                        } label: {
-                            Text("Create Note")
-                                .font(.headline.weight(.semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Color.purple.opacity(0.9))
-
-                        Button { dismiss() } label: {
-                            Text("Cancel")
-                                .font(.headline.weight(.semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                    .padding(.top, 6)
+            Form {
+                Section("Title") {
+                    TextField("Enter title", text: $title)
                 }
-                .padding()
+
+                Section("Body") {
+                    TextEditor(text: $bodyText)
+                        .frame(minHeight: 220)
+                }
+
+                if let errorText {
+                    Section {
+                        Text(errorText)
+                            .foregroundColor(.red)
+                            .font(.footnote)
+                    }
+                }
             }
-            .navigationBarHidden(true)
+            .navigationTitle("New Note")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        store.addNote(title: title, body: bodyText) { success in
+                            if success {
+                                dismiss()
+                            } else {
+                                errorText = "Could not create note."
+                            }
+                        }
+                    }
+                    .disabled(
+                        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                        bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
+                }
+            }
         }
     }
 }
-
-// MARK: - Note Detail
 
 struct NoteDetailView: View {
     @EnvironmentObject var store: AppStore
@@ -382,12 +237,12 @@ struct NoteDetailView: View {
 
     let noteID: UUID
 
-    @State private var isEditing = false
     @State private var title = ""
     @State private var bodyText = ""
-    @State private var seed: Int = 2
+    @State private var seed = Int.random(in: 0...10_000)
 
-    private let seeds: [Int] = [0, 1, 2, 3, 4, 5]
+    @State private var showDeleteAlert = false
+    @State private var saveMessage: String?
 
     private var noteIndex: Int? {
         store.notes.firstIndex(where: { $0.id == noteID })
@@ -397,8 +252,8 @@ struct NoteDetailView: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.06, green: 0.07, blue: 0.12),
-                    Color(red: 0.10, green: 0.10, blue: 0.18),
+                    Color.black,
+                    Color(red: 8/255, green: 12/255, blue: 42/255),
                     Color.black
                 ],
                 startPoint: .topLeading,
@@ -406,195 +261,111 @@ struct NoteDetailView: View {
             )
             .ignoresSafeArea()
 
-            if let idx = noteIndex {
-                let note = store.notes[idx]
-                let c = NoteColors.color(for: note.colorSeed)
+            VStack(spacing: 14) {
+                header
 
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 14) {
-                        HStack {
-                            Button {
-                                dismiss()
-                            } label: {
-                                Image(systemName: "chevron.left")
-                                    .font(.system(size: 15, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .padding(10)
-                                    .background(Color.white.opacity(0.10))
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
+                VStack(spacing: 14) {
+                    TextField("Title", text: $title)
+                        .font(.title2.bold())
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 14)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-                            Spacer()
-
-                            Button {
-                                if isEditing {
-                                    saveEdits()
-                                }
-                                isEditing.toggle()
-                            } label: {
-                                Text(isEditing ? "Save" : "Edit")
-                                    .font(.headline.weight(.semibold))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 10)
-                                    .background(Color.white.opacity(0.10))
-                                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-
-                            Button(role: .destructive) {
-                                deleteThisNote()
-                            } label: {
-                                Image(systemName: "trash")
-                                    .font(.system(size: 15, weight: .bold))
-                                    .foregroundStyle(.red)
-                                    .padding(10)
-                                    .background(Color.white.opacity(0.10))
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.top, 6)
-
-                        HStack(spacing: 12) {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(c)
-                                .frame(width: 10, height: 52)
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Note")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.white.opacity(0.70))
-                                Text(note.createdAt.formatted(date: .complete, time: .shortened))
-                                    .font(.subheadline)
-                                    .foregroundStyle(.white.opacity(0.85))
-                            }
-
-                            Spacer()
-                        }
-                        .padding(14)
-                        .background(Color.white.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-
-                        if isEditing {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("Title")
-                                    .font(.headline)
-                                    .foregroundStyle(.white.opacity(0.9))
-                                TextField("Title", text: $title)
-                                    .textFieldStyle(.roundedBorder)
-                            }
-
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("Content")
-                                    .font(.headline)
-                                    .foregroundStyle(.white.opacity(0.9))
-                                TextEditor(text: $bodyText)
-                                    .frame(minHeight: 260)
-                                    .padding(10)
-                                    .background(Color.white.opacity(0.06))
-                                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                    .foregroundStyle(.white)
-                            }
-
-                            Text("Color")
-                                .font(.headline)
-                                .foregroundStyle(.white.opacity(0.9))
-
-                            HStack(spacing: 12) {
-                                ForEach(seeds, id: \.self) { s in
-                                    let isSelected = (s == seed)
-                                    ZStack {
-                                        Circle()
-                                            .fill(NoteColors.color(for: s))
-                                            .frame(width: 32, height: 32)
-                                        if isSelected {
-                                            Image(systemName: "checkmark")
-                                                .font(.system(size: 12, weight: .bold))
-                                                .foregroundStyle(.black.opacity(0.65))
-                                        }
-                                    }
-                                    .overlay(
-                                        Circle().stroke(
-                                            isSelected ? Color.purple : Color.white.opacity(0.12),
-                                            lineWidth: isSelected ? 3 : 1
-                                        )
-                                    )
-                                    .contentShape(Circle())
-                                    .onTapGesture { seed = s }
-                                }
-                            }
-                            .padding(.bottom, 6)
-
-                        } else {
-                            Text(note.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled" : note.title)
-                                .font(.system(size: 28, weight: .bold))
-                                .foregroundStyle(.white)
-                                .padding(.top, 6)
-
-                            Text(note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "No content" : note.body)
-                                .font(.body)
-                                .foregroundStyle(.white.opacity(0.92))
-                                .padding(14)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.white.opacity(0.06))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .stroke(c.opacity(0.55), lineWidth: 1.2)
-                                )
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        }
-                    }
-                    .padding()
-                    .onAppear {
-                        title = note.title
-                        bodyText = note.body
-                        seed = note.colorSeed
-                    }
+                    TextEditor(text: $bodyText)
+                        .scrollContentBackground(.hidden)
+                        .foregroundColor(.white)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
-            } else {
-                VStack(spacing: 10) {
-                    Text("Note not found")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
-                    Button("Close") { dismiss() }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.purple)
+
+                if let saveMessage {
+                    Text(saveMessage)
+                        .font(.footnote)
+                        .foregroundColor(.white.opacity(0.7))
                 }
+            }
+            .padding(16)
+        }
+        .navigationBarBackButtonHidden(true)
+        .onAppear(perform: loadNote)
+        .alert("Delete Note?", isPresented: $showDeleteAlert) {
+            Button("Delete", role: .destructive) {
+                deleteThisNote()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This action cannot be undone.")
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.headline.bold())
+                    .foregroundColor(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
+            }
+
+            Spacer()
+
+            Button("Save") {
+                saveEdits()
+            }
+            .font(.headline)
+            .foregroundColor(.blue)
+
+            Button {
+                showDeleteAlert = true
+            } label: {
+                Image(systemName: "trash")
+                    .font(.headline)
+                    .foregroundColor(.red)
+                    .frame(width: 40, height: 40)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
             }
         }
     }
 
+    private func loadNote() {
+        guard let idx = noteIndex else { return }
+        let note = store.notes[idx]
+        title = note.title
+        bodyText = note.body
+        seed = note.colorSeed
+    }
+
     private func saveEdits() {
-        store.updateNote(
-            id: noteID,
-            title: title,
-            body: bodyText,
+        guard let idx = noteIndex else { return }
+
+        let existing = store.notes[idx]
+        let updated = NoteItem(
+            id: existing.id,
+            title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Untitled" : title.trimmingCharacters(in: .whitespacesAndNewlines),
+            body: bodyText.trimmingCharacters(in: .whitespacesAndNewlines),
+            createdAt: existing.createdAt,
             colorSeed: seed
         )
+
+        store.updateNote(updated) { success in
+            saveMessage = success ? "Saved" : "Could not save note."
+        }
     }
 
     private func deleteThisNote() {
         guard let idx = noteIndex else { return }
         let note = store.notes[idx]
-        store.deleteNote(note)
-        dismiss()
-    }
-}
-
-// MARK: - Colors
-
-enum NoteColors {
-    static func color(for seed: Int) -> Color {
-        let palette: [Color] = [
-            Color(red: 0.96, green: 0.90, blue: 0.48),
-            Color(red: 0.81, green: 0.90, blue: 1.00),
-            Color(red: 0.92, green: 0.84, blue: 1.00),
-            Color(red: 0.82, green: 0.97, blue: 0.87),
-            Color(red: 0.92, green: 0.92, blue: 0.92),
-            Color(red: 1.00, green: 0.90, blue: 0.76)
-        ]
-        return palette[abs(seed) % palette.count]
+        store.deleteNote(note) { _ in
+            dismiss()
+        }
     }
 }

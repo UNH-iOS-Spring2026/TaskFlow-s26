@@ -1,333 +1,28 @@
-//
-//  AuthView.swift
-//  Task_Flow
-//
-
 import SwiftUI
-import LocalAuthentication
 
 struct AuthView: View {
     @EnvironmentObject var auth: AuthStore
 
-    @State private var email: String = ""
-    @State private var password: String = ""
+    @State private var isLoginMode = true
 
+    @State private var email = ""
+    @State private var password = ""
+    @State private var confirmPassword = ""
+
+    @State private var forgotEmail = ""
+    @State private var showForgotPasswordSheet = false
+
+    @State private var errorMessage = ""
+    @State private var infoMessage = ""
     @State private var isLoading = false
-    @State private var errorText: String?
-
-    @State private var showSignUp = false
-    @State private var showForgot = false
-
-    // Biometrics UI
-    @State private var biometricsAvailable = false
-    @State private var biometryType: LABiometryType = .none
-
-    var body: some View {
-        ZStack {
-            background.ignoresSafeArea()
-
-            VStack(spacing: 16) {
-                Spacer().frame(height: 30)
-
-                Text("TaskFlow")
-                    .font(.system(size: 34, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.bottom, 8)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    fieldLabel("Email")
-                    DarkField(
-                        placeholder: "Email",
-                        text: $email,
-                        isSecure: false,
-                        keyboard: .emailAddress,
-                        contentType: .emailAddress
-                    )
-
-                    fieldLabel("Password")
-                    DarkField(
-                        placeholder: "Password",
-                        text: $password,
-                        isSecure: true,
-                        keyboard: .default,
-                        contentType: .password
-                    )
-
-                    HStack {
-                        Spacer()
-                        Button {
-                            showForgot = true
-                        } label: {
-                            Text("Forgot Password?")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white.opacity(0.85))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.top, 2)
-                }
-                .padding(.horizontal, 26)
-
-                Button {
-                    login()
-                } label: {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .fill(Color.purple.opacity(0.92))
-                            .frame(height: 52)
-
-                        if isLoading {
-                            ProgressView()
-                                .tint(.white)
-                        } else {
-                            Text("Login")
-                                .font(.headline.weight(.semibold))
-                                .foregroundStyle(.white)
-                        }
-                    }
-                }
-                .padding(.horizontal, 26)
-                .disabled(isLoading)
-
-                HStack(spacing: 6) {
-                    Text("New user?")
-                        .foregroundStyle(.white.opacity(0.65))
-                    Button {
-                        showSignUp = true
-                    } label: {
-                        Text("Sign Up")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(.white)
-                            .underline()
-                    }
-                    .buttonStyle(.plain)
-                }
-                .font(.subheadline)
-
-                HStack(spacing: 12) {
-                    biometricButton(kind: .faceID)
-                    biometricButton(kind: .touchID)
-                }
-                .padding(.horizontal, 26)
-                .padding(.top, 4)
-
-                if let err = errorText {
-                    Text(err)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.red.opacity(0.95))
-                        .padding(.top, 6)
-                        .padding(.horizontal, 26)
-                        .multilineTextAlignment(.center)
-                }
-
-                Spacer()
-
-                Text("Use your email and password to login. Biometrics requires your email to be entered first.")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.35))
-                    .padding(.bottom, 12)
-            }
-        }
-        .onAppear { refreshBiometricsAvailability() }
-        .sheet(isPresented: $showSignUp) {
-            SignUpSheet()
-                .environmentObject(auth)
-        }
-        .sheet(isPresented: $showForgot) {
-            ForgotPasswordSheet(prefillEmail: email)
-                .environmentObject(auth)
-        }
-    }
-
-    // MARK: - Actions
-
-    private func login() {
-        print("✅ Login tapped")
-
-        errorText = nil
-        let e = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        let p = password.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !e.isEmpty, !p.isEmpty else {
-            errorText = "Please enter email and password."
-            return
-        }
-
-        isLoading = true
-
-        auth.login(email: e, password: p) { success, message in
-            isLoading = false
-
-            if !success {
-                errorText = message ?? "Login failed."
-            }
-        }
-    }
-
-    private enum BioKind { case faceID, touchID }
-
-    private func biometricButton(kind: BioKind) -> some View {
-        let title = (kind == .faceID) ? "Face ID" : "Touch ID"
-        let icon  = (kind == .faceID) ? "faceid" : "touchid"
-
-        let enabled =
-            biometricsAvailable &&
-            ((kind == .faceID && biometryType == .faceID) ||
-             (kind == .touchID && biometryType == .touchID))
-
-        return Button {
-            runBiometricLogin()
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                Text(title)
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.white.opacity(enabled ? 0.9 : 0.35))
-            .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .background(Color.white.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled || isLoading)
-    }
-
-    private func runBiometricLogin() {
-        let ctx = LAContext()
-        ctx.localizedCancelTitle = "Cancel"
-
-        var err: NSError?
-        guard ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &err) else {
-            errorText = "Biometrics not available on this device."
-            return
-        }
-
-        isLoading = true
-        errorText = nil
-
-        ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: "Authenticate to login") { success, _ in
-            DispatchQueue.main.async {
-                if success {
-                    let e = email.trimmingCharacters(in: .whitespacesAndNewlines)
-
-                    guard !e.isEmpty else {
-                        isLoading = false
-                        errorText = "Enter your email first, then use biometrics."
-                        return
-                    }
-
-                    auth.login(email: e, password: "biometric") { success, message in
-                        isLoading = false
-
-                        if !success {
-                            errorText = message ?? "Biometric login failed."
-                        }
-                    }
-                } else {
-                    isLoading = false
-                    errorText = "Authentication failed. Try again."
-                }
-            }
-        }
-    }
-
-    private func refreshBiometricsAvailability() {
-        let ctx = LAContext()
-        var err: NSError?
-        let ok = ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &err)
-        biometricsAvailable = ok
-        biometryType = ctx.biometryType
-    }
-
-    // MARK: - UI helpers
-
-    private var background: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.06, green: 0.07, blue: 0.12),
-                Color(red: 0.08, green: 0.08, blue: 0.16),
-                Color.black
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    private func fieldLabel(_ t: String) -> some View {
-        Text(t)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.white.opacity(0.55))
-            .padding(.leading, 6)
-    }
-}
-
-// MARK: - DarkField
-
-private struct DarkField: View {
-    let placeholder: String
-    @Binding var text: String
-    let isSecure: Bool
-    let keyboard: UIKeyboardType
-    let contentType: UITextContentType?
-
-    @State private var showPassword = false
-
-    var body: some View {
-        ZStack(alignment: .trailing) {
-            Group {
-                if isSecure && !showPassword {
-                    SecureField("", text: $text, prompt: Text(placeholder).foregroundStyle(.white.opacity(0.35)))
-                } else {
-                    TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(.white.opacity(0.35)))
-                }
-            }
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled(true)
-            .keyboardType(keyboard)
-            .textContentType(contentType)
-            .foregroundStyle(.white.opacity(0.95))
-            .padding(.horizontal, 14)
-            .frame(height: 46)
-            .background(Color.white.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-            if isSecure {
-                Button {
-                    showPassword.toggle()
-                } label: {
-                    Image(systemName: showPassword ? "eye.slash" : "eye")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.55))
-                        .padding(.trailing, 14)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-}
-
-// MARK: - Forgot Password Sheet
-
-private struct ForgotPasswordSheet: View {
-    @EnvironmentObject var auth: AuthStore
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var email: String
-    @State private var sent = false
-    @State private var isLoading = false
-    @State private var errText: String?
-
-    init(prefillEmail: String) {
-        _email = State(initialValue: prefillEmail.trimmingCharacters(in: .whitespacesAndNewlines))
-    }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 LinearGradient(
                     colors: [
-                        Color(red: 0.06, green: 0.07, blue: 0.12),
+                        Color.black,
+                        Color(red: 8/255, green: 12/255, blue: 42/255),
                         Color.black
                     ],
                     startPoint: .topLeading,
@@ -335,226 +30,328 @@ private struct ForgotPasswordSheet: View {
                 )
                 .ignoresSafeArea()
 
-                VStack(spacing: 14) {
-                    Text("Reset Password")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.top, 10)
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 22) {
+                        header
+                        modeSwitcher
+                        formCard
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 30)
+                }
+            }
+            .sheet(isPresented: $showForgotPasswordSheet) {
+                forgotPasswordView
+            }
+        }
+    }
 
-                    Text("Enter your email. We'll send a password reset email.")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.6))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-
-                    DarkField(
-                        placeholder: "Email",
-                        text: $email,
-                        isSecure: false,
-                        keyboard: .emailAddress,
-                        contentType: .emailAddress
+    private var header: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "checklist.checked")
+                .font(.system(size: 54, weight: .bold))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [.purple, .pink],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     )
-                    .padding(.horizontal, 26)
-                    .padding(.top, 6)
+                )
+
+            Text("Task Flow")
+                .font(.system(size: 34, weight: .bold))
+                .foregroundColor(.white)
+
+            Text("Organize tasks, notes, reminders, and more")
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.75))
+                .multilineTextAlignment(.center)
+        }
+        .padding(.top, 20)
+    }
+
+    private var modeSwitcher: some View {
+        HStack(spacing: 0) {
+            Button {
+                clearMessages()
+                isLoginMode = true
+            } label: {
+                Text("Login")
+                    .font(.headline)
+                    .foregroundColor(isLoginMode ? .white : .white.opacity(0.65))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(isLoginMode ? Color.white.opacity(0.12) : Color.clear)
+            }
+
+            Button {
+                clearMessages()
+                isLoginMode = false
+            } label: {
+                Text("Sign Up")
+                    .font(.headline)
+                    .foregroundColor(!isLoginMode ? .white : .white.opacity(0.65))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(!isLoginMode ? Color.white.opacity(0.12) : Color.clear)
+            }
+        }
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var formCard: some View {
+        VStack(spacing: 16) {
+            VStack(spacing: 14) {
+                inputField(
+                    title: "Email",
+                    text: $email,
+                    placeholder: "Enter your email",
+                    isSecure: false
+                )
+
+                inputField(
+                    title: "Password",
+                    text: $password,
+                    placeholder: "Enter your password",
+                    isSecure: true
+                )
+
+                if !isLoginMode {
+                    inputField(
+                        title: "Confirm Password",
+                        text: $confirmPassword,
+                        placeholder: "Confirm your password",
+                        isSecure: true
+                    )
+                }
+            }
+
+            if !errorMessage.isEmpty {
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundColor(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if !infoMessage.isEmpty {
+                Text(infoMessage)
+                    .font(.footnote)
+                    .foregroundColor(.green)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Button {
+                submit()
+            } label: {
+                HStack {
+                    if isLoading {
+                        ProgressView()
+                    }
+                    Text(isLoginMode ? "Login" : "Create Account")
+                        .font(.headline.bold())
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    LinearGradient(
+                        colors: [.purple, .pink],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .disabled(isLoading)
+
+            if isLoginMode {
+                Button {
+                    clearMessages()
+                    forgotEmail = email
+                    showForgotPasswordSheet = true
+                } label: {
+                    Text("Forgot Password?")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.blue)
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(20)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private func inputField(
+        title: String,
+        text: Binding<String>,
+        placeholder: String,
+        isSecure: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.white.opacity(0.8))
+
+            Group {
+                if isSecure {
+                    SecureField(placeholder, text: text)
+                } else {
+                    TextField(placeholder, text: text)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.emailAddress)
+                    }
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+            .background(Color.white.opacity(0.07))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    private var forgotPasswordView: some View {
+        NavigationStack {
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color.black,
+                        Color(red: 8/255, green: 12/255, blue: 42/255),
+                        Color.black
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+
+                VStack(spacing: 18) {
+                    Text("Reset Password")
+                        .font(.title2.bold())
+                        .foregroundColor(.white)
+
+                    Text("Enter your email and we’ll send a reset link.")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.75))
+                        .multilineTextAlignment(.center)
+
+                    TextField("Email", text: $forgotEmail)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.emailAddress)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 14)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                     Button {
                         sendReset()
                     } label: {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .fill(Color.purple.opacity(0.92))
-                                .frame(height: 52)
-
+                        HStack {
                             if isLoading {
                                 ProgressView()
-                                    .tint(.white)
-                            } else {
-                                Text(sent ? "Reset Sent ✅" : "Send Reset Link")
-                                    .font(.headline.weight(.semibold))
-                                    .foregroundStyle(.white)
                             }
+                            Text("Send Reset Link")
+                                .font(.headline.bold())
                         }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 15)
+                        .background(
+                            LinearGradient(
+                                colors: [.purple, .pink],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
-                    .padding(.horizontal, 26)
-                    .disabled(sent || isLoading)
+                    .disabled(isLoading)
 
-                    if let e = errText {
-                        Text(e)
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.red.opacity(0.95))
-                            .padding(.top, 4)
-                            .padding(.horizontal, 26)
-                            .multilineTextAlignment(.center)
+                    if !errorMessage.isEmpty {
+                        Text(errorMessage)
+                            .font(.footnote)
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    if !infoMessage.isEmpty {
+                        Text(infoMessage)
+                            .font(.footnote)
+                            .foregroundColor(.green)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
                     Spacer()
                 }
+                .padding(20)
             }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") { dismiss() }
-                        .foregroundStyle(.white.opacity(0.85))
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") {
+                        showForgotPasswordSheet = false
+                    }
+                }
+            }
+        }
+    }
+
+    private func submit() {
+        clearMessages()
+        isLoading = true
+
+        let cleanEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanPassword = password.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if isLoginMode {
+            auth.login(email: cleanEmail, password: cleanPassword) { success, message in
+                isLoading = false
+                if success {
+                    infoMessage = "Login successful."
+                } else {
+                    errorMessage = message ?? "Login failed."
+                }
+            }
+        } else {
+            let cleanConfirm = confirmPassword.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard cleanPassword == cleanConfirm else {
+                isLoading = false
+                errorMessage = "Passwords do not match."
+                return
+            }
+
+            auth.createAccount(email: cleanEmail, password: cleanPassword) { success, message in
+                isLoading = false
+                if success {
+                    infoMessage = "Account created successfully."
+                } else {
+                    errorMessage = message ?? "Sign up failed."
                 }
             }
         }
     }
 
     private func sendReset() {
-        errText = nil
-        let e = email.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !e.isEmpty else {
-            errText = "Enter your email address."
-            return
-        }
-
+        clearMessages()
         isLoading = true
 
-        auth.resetPassword(email: e) { success, message in
+        let cleanEmail = forgotEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        auth.resetPassword(email: cleanEmail) { success, message in
             isLoading = false
-
             if success {
-                sent = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                    dismiss()
-                }
+                infoMessage = "Password reset email sent."
             } else {
-                errText = message ?? "Could not send reset email."
-            }
-        }
-    }
-}
-
-// MARK: - Sign Up Sheet
-
-private struct SignUpSheet: View {
-    @EnvironmentObject var auth: AuthStore
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var email = ""
-    @State private var password = ""
-    @State private var confirm = ""
-    @State private var errText: String?
-    @State private var isLoading = false
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.06, green: 0.07, blue: 0.12),
-                        Color.black
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-
-                VStack(spacing: 14) {
-                    Text("Create Account")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.top, 10)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        DarkField(
-                            placeholder: "Email",
-                            text: $email,
-                            isSecure: false,
-                            keyboard: .emailAddress,
-                            contentType: .emailAddress
-                        )
-                        DarkField(
-                            placeholder: "Password",
-                            text: $password,
-                            isSecure: true,
-                            keyboard: .default,
-                            contentType: .newPassword
-                        )
-                        DarkField(
-                            placeholder: "Confirm Password",
-                            text: $confirm,
-                            isSecure: true,
-                            keyboard: .default,
-                            contentType: .newPassword
-                        )
-                    }
-                    .padding(.horizontal, 26)
-                    .padding(.top, 6)
-
-                    Button {
-                        createAccount()
-                    } label: {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .fill(Color.purple.opacity(0.92))
-                                .frame(height: 52)
-
-                            if isLoading {
-                                ProgressView()
-                                    .tint(.white)
-                            } else {
-                                Text("Create Account")
-                                    .font(.headline.weight(.semibold))
-                                    .foregroundStyle(.white)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 26)
-                    .disabled(isLoading)
-
-                    if let e = errText {
-                        Text(e)
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.red.opacity(0.95))
-                            .padding(.horizontal, 26)
-                            .multilineTextAlignment(.center)
-                    }
-
-                    Spacer()
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
-                        .foregroundStyle(.white.opacity(0.85))
-                }
+                errorMessage = message ?? "Could not send reset email."
             }
         }
     }
 
-    private func createAccount() {
-        errText = nil
-
-        let e = email.trimmingCharacters(in: .whitespacesAndNewlines)
-        let p = password.trimmingCharacters(in: .whitespacesAndNewlines)
-        let c = confirm.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !e.isEmpty else {
-            errText = "Enter your email."
-            return
-        }
-
-        guard p.count >= 6 else {
-            errText = "Password must be at least 6 characters."
-            return
-        }
-
-        guard p == c else {
-            errText = "Passwords do not match."
-            return
-        }
-
-        isLoading = true
-
-        auth.createAccount(email: e, password: p) { success, message in
-            isLoading = false
-
-            if success {
-                dismiss()
-            } else {
-                errText = message ?? "Could not create account."
-            }
-        }
+    private func clearMessages() {
+        errorMessage = ""
+        infoMessage = ""
     }
 }
