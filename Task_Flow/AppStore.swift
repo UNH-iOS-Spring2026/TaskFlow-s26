@@ -1,7 +1,12 @@
+// code assited by the some online documentations and LLM
+
 import Foundation
 import Combine
 import SwiftUI
 import FirebaseFirestore
+
+
+// Synching with firestore
 
 final class AppStore: ObservableObject {
     @Published var notes: [NoteItem] = []
@@ -70,7 +75,8 @@ final class AppStore: ObservableObject {
             }
         }
     }
-
+    // Clears all local data when user logs out
+    
     private func clearAllData() {
         notes = []
         reminders = []
@@ -98,7 +104,9 @@ final class AppStore: ObservableObject {
         goalsListener = nil
         habitsListener = nil
     }
-
+    
+    // Ensures a user document exists in firestore
+    
     private func ensureUserDocument(uid: String, completion: @escaping (Bool) -> Void) {
         let payload: [String: Any] = [
             "uid": uid,
@@ -120,6 +128,8 @@ final class AppStore: ObservableObject {
         }
     }
 
+    // Ensures for having a valid User ID
+    
     private func requireUID() -> String? {
         guard let uid = auth.currentUserId, !uid.isEmpty else {
             print("❌ NO USER ID FOUND")
@@ -137,7 +147,9 @@ final class AppStore: ObservableObject {
     private func document(_ name: String, uid: String, id: UUID) -> DocumentReference {
         collection(name, uid: uid).document(id.uuidString)
     }
-
+     
+    // Extracts date from Firestore data
+    
     private func date(_ data: [String: Any], _ key: String, fallback: Date = Date()) -> Date {
         if let timestamp = data[key] as? Timestamp {
             return timestamp.dateValue()
