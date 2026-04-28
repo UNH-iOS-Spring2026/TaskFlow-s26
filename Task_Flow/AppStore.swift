@@ -47,27 +47,38 @@ final class AppStore: ObservableObject {
         removeAllListeners()
 
         guard let uid, !uid.isEmpty else {
-            notes = []
-            reminders = []
-            tasks = []
-            workSessions = []
-            expenses = []
-            goalRecords = []
-            habits = []
+            print("❌ AppStore: No logged-in user")
+            clearAllData()
             return
         }
 
-        ensureUserDocument(uid: uid) { [weak self] ok in
-            guard let self, ok else { return }
+        print("✅ AppStore UID:", uid)
 
-            self.startNotesListener(uid: uid)
-            self.startTasksListener(uid: uid)
-            self.startRemindersListener(uid: uid)
-            self.startWorkSessionsListener(uid: uid)
-            self.startExpensesListener(uid: uid)
-            self.startGoalsListener(uid: uid)
-            self.startHabitsListener(uid: uid)
+        ensureUserDocument(uid: uid) { [weak self] ok in
+            guard let self else { return }
+
+            if ok {
+                self.startNotesListener(uid: uid)
+                self.startTasksListener(uid: uid)
+                self.startRemindersListener(uid: uid)
+                self.startWorkSessionsListener(uid: uid)
+                self.startExpensesListener(uid: uid)
+                self.startGoalsListener(uid: uid)
+                self.startHabitsListener(uid: uid)
+            } else {
+                print("❌ Failed to create user document")
+            }
         }
+    }
+
+    private func clearAllData() {
+        notes = []
+        reminders = []
+        tasks = []
+        workSessions = []
+        expenses = []
+        goalRecords = []
+        habits = []
     }
 
     private func removeAllListeners() {
@@ -98,20 +109,24 @@ final class AppStore: ObservableObject {
 
         db.collection("users").document(uid).setData(payload, merge: true) { error in
             DispatchQueue.main.async {
-                completion(error == nil)
-            }
-
-            if let error {
-                print("ENSURE USER DOC ERROR:", error.localizedDescription)
+                if let error {
+                    print("❌ USER DOC ERROR:", error.localizedDescription)
+                    completion(false)
+                } else {
+                    print("✅ User document ready")
+                    completion(true)
+                }
             }
         }
     }
 
     private func requireUID() -> String? {
         guard let uid = auth.currentUserId, !uid.isEmpty else {
-            print("APPSTORE ERROR: missing authenticated uid")
+            print("❌ NO USER ID FOUND")
             return nil
         }
+
+        print("✅ UID:", uid)
         return uid
     }
 
@@ -142,7 +157,7 @@ final class AppStore: ObservableObject {
             .order(by: "createdAt", descending: true)
             .addSnapshotListener { [weak self] snapshot, error in
                 if let error {
-                    print("NOTES LISTENER ERROR:", error.localizedDescription)
+                    print("❌ NOTES LISTENER ERROR:", error.localizedDescription)
                     return
                 }
 
@@ -161,7 +176,7 @@ final class AppStore: ObservableObject {
             .order(by: "createdAt", descending: true)
             .addSnapshotListener { [weak self] snapshot, error in
                 if let error {
-                    print("TASKS LISTENER ERROR:", error.localizedDescription)
+                    print("❌ TASKS LISTENER ERROR:", error.localizedDescription)
                     return
                 }
 
@@ -180,7 +195,7 @@ final class AppStore: ObservableObject {
             .order(by: "dueAt", descending: false)
             .addSnapshotListener { [weak self] snapshot, error in
                 if let error {
-                    print("REMINDERS LISTENER ERROR:", error.localizedDescription)
+                    print("❌ REMINDERS LISTENER ERROR:", error.localizedDescription)
                     return
                 }
 
@@ -199,7 +214,7 @@ final class AppStore: ObservableObject {
             .order(by: "date", descending: true)
             .addSnapshotListener { [weak self] snapshot, error in
                 if let error {
-                    print("WORK SESSIONS LISTENER ERROR:", error.localizedDescription)
+                    print("❌ WORK SESSIONS LISTENER ERROR:", error.localizedDescription)
                     return
                 }
 
@@ -209,6 +224,7 @@ final class AppStore: ObservableObject {
 
                 DispatchQueue.main.async {
                     self?.workSessions = items
+                    print("✅ Work sessions loaded:", items.count)
                 }
             }
     }
@@ -218,7 +234,7 @@ final class AppStore: ObservableObject {
             .order(by: "date", descending: true)
             .addSnapshotListener { [weak self] snapshot, error in
                 if let error {
-                    print("EXPENSES LISTENER ERROR:", error.localizedDescription)
+                    print("❌ EXPENSES LISTENER ERROR:", error.localizedDescription)
                     return
                 }
 
@@ -228,6 +244,7 @@ final class AppStore: ObservableObject {
 
                 DispatchQueue.main.async {
                     self?.expenses = items
+                    print("✅ Expenses loaded:", items.count)
                 }
             }
     }
@@ -237,7 +254,7 @@ final class AppStore: ObservableObject {
             .order(by: "targetDate", descending: false)
             .addSnapshotListener { [weak self] snapshot, error in
                 if let error {
-                    print("GOALS LISTENER ERROR:", error.localizedDescription)
+                    print("❌ GOALS LISTENER ERROR:", error.localizedDescription)
                     return
                 }
 
@@ -247,6 +264,7 @@ final class AppStore: ObservableObject {
 
                 DispatchQueue.main.async {
                     self?.goalRecords = items
+                    print("✅ Goals loaded:", items.count)
                 }
             }
     }
@@ -256,7 +274,7 @@ final class AppStore: ObservableObject {
             .order(by: "createdAt", descending: true)
             .addSnapshotListener { [weak self] snapshot, error in
                 if let error {
-                    print("HABITS LISTENER ERROR:", error.localizedDescription)
+                    print("❌ HABITS LISTENER ERROR:", error.localizedDescription)
                     return
                 }
 
@@ -266,6 +284,7 @@ final class AppStore: ObservableObject {
 
                 DispatchQueue.main.async {
                     self?.habits = items
+                    print("✅ Habits loaded:", items.count)
                 }
             }
     }
@@ -384,7 +403,13 @@ final class AppStore: ObservableObject {
             "createdAt": Timestamp(date: note.createdAt)
         ]) { error in
             DispatchQueue.main.async {
-                completion?(error == nil)
+                if let error {
+                    print("❌ Add note failed:", error.localizedDescription)
+                    completion?(false)
+                } else {
+                    print("✅ Note saved")
+                    completion?(true)
+                }
             }
         }
     }
@@ -402,7 +427,13 @@ final class AppStore: ObservableObject {
             "createdAt": Timestamp(date: note.createdAt)
         ], merge: true) { error in
             DispatchQueue.main.async {
-                completion?(error == nil)
+                if let error {
+                    print("❌ Update note failed:", error.localizedDescription)
+                    completion?(false)
+                } else {
+                    print("✅ Note updated")
+                    completion?(true)
+                }
             }
         }
     }
@@ -415,7 +446,13 @@ final class AppStore: ObservableObject {
 
         document("notes", uid: uid, id: note.id).delete { error in
             DispatchQueue.main.async {
-                completion?(error == nil)
+                if let error {
+                    print("❌ Delete note failed:", error.localizedDescription)
+                    completion?(false)
+                } else {
+                    print("✅ Note deleted")
+                    completion?(true)
+                }
             }
         }
     }
@@ -438,7 +475,13 @@ final class AppStore: ObservableObject {
             "createdAt": Timestamp(date: task.createdAt)
         ]) { error in
             DispatchQueue.main.async {
-                completion?(error == nil)
+                if let error {
+                    print("❌ Add task failed:", error.localizedDescription)
+                    completion?(false)
+                } else {
+                    print("✅ Task saved")
+                    completion?(true)
+                }
             }
         }
     }
@@ -455,7 +498,13 @@ final class AppStore: ObservableObject {
             "createdAt": Timestamp(date: task.createdAt)
         ], merge: true) { error in
             DispatchQueue.main.async {
-                completion?(error == nil)
+                if let error {
+                    print("❌ Update task failed:", error.localizedDescription)
+                    completion?(false)
+                } else {
+                    print("✅ Task updated")
+                    completion?(true)
+                }
             }
         }
     }
@@ -474,7 +523,13 @@ final class AppStore: ObservableObject {
 
         document("tasks", uid: uid, id: task.id).delete { error in
             DispatchQueue.main.async {
-                completion?(error == nil)
+                if let error {
+                    print("❌ Delete task failed:", error.localizedDescription)
+                    completion?(false)
+                } else {
+                    print("✅ Task deleted")
+                    completion?(true)
+                }
             }
         }
     }
@@ -503,7 +558,13 @@ final class AppStore: ObservableObject {
             "createdAt": Timestamp(date: reminder.createdAt)
         ]) { error in
             DispatchQueue.main.async {
-                completion?(error == nil)
+                if let error {
+                    print("❌ Add reminder failed:", error.localizedDescription)
+                    completion?(false)
+                } else {
+                    print("✅ Reminder saved")
+                    completion?(true)
+                }
             }
         }
     }
@@ -521,7 +582,13 @@ final class AppStore: ObservableObject {
             "createdAt": Timestamp(date: reminder.createdAt)
         ], merge: true) { error in
             DispatchQueue.main.async {
-                completion?(error == nil)
+                if let error {
+                    print("❌ Update reminder failed:", error.localizedDescription)
+                    completion?(false)
+                } else {
+                    print("✅ Reminder updated")
+                    completion?(true)
+                }
             }
         }
     }
@@ -540,7 +607,13 @@ final class AppStore: ObservableObject {
 
         document("reminders", uid: uid, id: reminder.id).delete { error in
             DispatchQueue.main.async {
-                completion?(error == nil)
+                if let error {
+                    print("❌ Delete reminder failed:", error.localizedDescription)
+                    completion?(false)
+                } else {
+                    print("✅ Reminder deleted")
+                    completion?(true)
+                }
             }
         }
     }
@@ -561,7 +634,13 @@ final class AppStore: ObservableObject {
             "notes": session.notes
         ]) { error in
             DispatchQueue.main.async {
-                completion?(error?.localizedDescription)
+                if let error {
+                    print("❌ Add work session failed:", error.localizedDescription)
+                    completion?(error.localizedDescription)
+                } else {
+                    print("✅ Work session saved")
+                    completion?(nil)
+                }
             }
         }
     }
@@ -574,7 +653,13 @@ final class AppStore: ObservableObject {
 
         document("workSessions", uid: uid, id: session.id).delete { error in
             DispatchQueue.main.async {
-                completion?(error?.localizedDescription)
+                if let error {
+                    print("❌ Delete work session failed:", error.localizedDescription)
+                    completion?(error.localizedDescription)
+                } else {
+                    print("✅ Work session deleted")
+                    completion?(nil)
+                }
             }
         }
     }
@@ -595,7 +680,13 @@ final class AppStore: ObservableObject {
             "amount": expense.amount
         ]) { error in
             DispatchQueue.main.async {
-                completion?(error?.localizedDescription)
+                if let error {
+                    print("❌ Add expense failed:", error.localizedDescription)
+                    completion?(error.localizedDescription)
+                } else {
+                    print("✅ Expense saved")
+                    completion?(nil)
+                }
             }
         }
     }
@@ -608,7 +699,13 @@ final class AppStore: ObservableObject {
 
         document("expenses", uid: uid, id: expense.id).delete { error in
             DispatchQueue.main.async {
-                completion?(error?.localizedDescription)
+                if let error {
+                    print("❌ Delete expense failed:", error.localizedDescription)
+                    completion?(error.localizedDescription)
+                } else {
+                    print("✅ Expense deleted")
+                    completion?(nil)
+                }
             }
         }
     }
@@ -627,7 +724,13 @@ final class AppStore: ObservableObject {
             "targetDate": Timestamp(date: goal.targetDate)
         ]) { error in
             DispatchQueue.main.async {
-                completion?(error?.localizedDescription)
+                if let error {
+                    print("❌ Add goal failed:", error.localizedDescription)
+                    completion?(error.localizedDescription)
+                } else {
+                    print("✅ Goal saved")
+                    completion?(nil)
+                }
             }
         }
     }
@@ -644,7 +747,13 @@ final class AppStore: ObservableObject {
 
         document("goals", uid: uid, id: goal.id).delete { error in
             DispatchQueue.main.async {
-                completion?(error?.localizedDescription)
+                if let error {
+                    print("❌ Delete goal failed:", error.localizedDescription)
+                    completion?(error.localizedDescription)
+                } else {
+                    print("✅ Goal deleted")
+                    completion?(nil)
+                }
             }
         }
     }
@@ -695,7 +804,13 @@ final class AppStore: ObservableObject {
 
         document("habits", uid: uid, id: habit.id).setData(payload, merge: true) { error in
             DispatchQueue.main.async {
-                completion?(error?.localizedDescription)
+                if let error {
+                    print("❌ Habit save failed:", error.localizedDescription)
+                    completion?(error.localizedDescription)
+                } else {
+                    print("✅ Habit saved")
+                    completion?(nil)
+                }
             }
         }
     }
@@ -708,7 +823,13 @@ final class AppStore: ObservableObject {
 
         document("habits", uid: uid, id: habit.id).delete { error in
             DispatchQueue.main.async {
-                completion?(error?.localizedDescription)
+                if let error {
+                    print("❌ Delete habit failed:", error.localizedDescription)
+                    completion?(error.localizedDescription)
+                } else {
+                    print("✅ Habit deleted")
+                    completion?(nil)
+                }
             }
         }
     }
