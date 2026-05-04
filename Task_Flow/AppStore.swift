@@ -1,7 +1,12 @@
+// code assited by the some online documentations and LLM
+
 import Foundation
 import Combine
 import FirebaseAuth
 import FirebaseFirestore
+
+
+// Synching with firestore
 
 final class AppStore: ObservableObject {
     @Published var notes: [NoteItem] = []
