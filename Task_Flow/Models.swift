@@ -1,8 +1,3 @@
-//
-//  Models.swift
-//  Task_Flow
-//
-
 import Foundation
 
 struct TaskItem: Identifiable, Codable, Equatable {
@@ -97,10 +92,8 @@ enum WorkTab {
 
     var title: String {
         switch self {
-        case .sessions:
-            return "Sessions"
-        case .expenses:
-            return "Expenses"
+        case .sessions: return "Sessions"
+        case .expenses: return "Expenses"
         }
     }
 }

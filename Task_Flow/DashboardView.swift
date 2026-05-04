@@ -1,4 +1,6 @@
 import SwiftUI
+import FirebaseAuth
+import FirebaseFirestore
 
 struct DashboardView: View {
     @EnvironmentObject var store: AppStore
@@ -17,11 +19,11 @@ struct DashboardView: View {
     }
 
     private var completedTodayTasksCount: Int {
-        todayTasks.filter(\.isDone).count
+        todayTasks.filter { $0.isDone }.count
     }
 
     private var completedTodayRemindersCount: Int {
-        todayReminders.filter(\.isDone).count
+        todayReminders.filter { $0.isDone }.count
     }
 
     private var taskProgressText: String {
@@ -34,6 +36,20 @@ struct DashboardView: View {
         guard !todayReminders.isEmpty else { return "0% complete" }
         let percent = Int((Double(completedTodayRemindersCount) / Double(todayReminders.count)) * 100)
         return "\(percent)% complete"
+    }
+
+    private var thisWeekHours: Double {
+        let calendar = Calendar.current
+        return store.workSessions
+            .filter { calendar.isDate($0.date, equalTo: Date(), toGranularity: .weekOfYear) }
+            .reduce(0) { $0 + $1.hours }
+    }
+
+    private var thisMonthEarnings: Double {
+        let calendar = Calendar.current
+        return store.workSessions
+            .filter { calendar.isDate($0.date, equalTo: Date(), toGranularity: .month) }
+            .reduce(0) { $0 + $1.earnings }
     }
 
     private var greetingTitle: String {
@@ -84,11 +100,9 @@ struct DashboardView: View {
             .navigationBarHidden(true)
             .sheet(isPresented: $showAddTaskSheet) {
                 AddTaskDashboardSheet()
-                    .environmentObject(store)
             }
             .sheet(isPresented: $showAddReminderSheet) {
                 AddReminderDashboardSheet()
-                    .environmentObject(store)
             }
         }
     }
@@ -177,10 +191,13 @@ struct DashboardView: View {
     }
 
     private var statsGrid: some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible(), spacing: 12),
-            GridItem(.flexible(), spacing: 12)
-        ], spacing: 12) {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: 12),
+                GridItem(.flexible(), spacing: 12)
+            ],
+            spacing: 12
+        ) {
             statCard(
                 title: "TODAY'S TASKS",
                 value: "\(completedTodayTasksCount)/\(todayTasks.count)",
@@ -197,14 +214,14 @@ struct DashboardView: View {
 
             statCard(
                 title: "WORK HOURS",
-                value: "0.0 h",
+                value: "\(String(format: "%.1f", thisWeekHours)) h",
                 subtitle: "this week",
                 background: Color(red: 95/255, green: 66/255, blue: 47/255)
             )
 
             statCard(
                 title: "EARNINGS",
-                value: "$0",
+                value: "$\(String(format: "%.0f", thisMonthEarnings))",
                 subtitle: "this month",
                 background: Color(red: 37/255, green: 87/255, blue: 57/255)
             )
@@ -376,9 +393,10 @@ struct DashboardView: View {
 }
 
 struct AddTaskDashboardSheet: View {
-    @EnvironmentObject var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
+
+    private let db = Firestore.firestore()
 
     var body: some View {
         NavigationStack {
@@ -388,49 +406,114 @@ struct AddTaskDashboardSheet: View {
             .navigationTitle("New Task")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        dismiss()
+                    }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        store.addTask(title: title) { success in
-                            if success { dismiss() }
-                        }
+                        saveTask()
                     }
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
     }
+
+    private func saveTask() {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            print("TASK SAVE ERROR: No Firebase user")
+            return
+        }
+
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty else { return }
+
+        let id = UUID().uuidString.uppercased()
+
+        db.collection("taskflowData")
+            .document(uid)
+            .collection("tasks")
+            .document(id)
+            .setData([
+                "title": cleanTitle,
+                "isDone": false,
+                "createdAt": Timestamp(date: Date())
+            ]) { error in
+                if let error {
+                    print("TASK FIREBASE ERROR:", error.localizedDescription)
+                } else {
+                    print("TASK SAVED FIREBASE:", id)
+                    dismiss()
+                }
+            }
+    }
 }
 
 struct AddReminderDashboardSheet: View {
-    @EnvironmentObject var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
     @State private var dueAt = Date()
+
+    private let db = Firestore.firestore()
 
     var body: some View {
         NavigationStack {
             Form {
                 TextField("Reminder title", text: $title)
-                DatePicker("Due time", selection: $dueAt)
+
+                DatePicker(
+                    "Due time",
+                    selection: $dueAt,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
             }
             .navigationTitle("New Reminder")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        dismiss()
+                    }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        store.addReminder(title: title, dueAt: dueAt) { success in
-                            if success { dismiss() }
-                        }
+                        saveReminder()
                     }
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
+    }
+
+    private func saveReminder() {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            print("REMINDER SAVE ERROR: No Firebase user")
+            return
+        }
+
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty else { return }
+
+        let id = UUID().uuidString.uppercased()
+
+        db.collection("taskflowData")
+            .document(uid)
+            .collection("reminders")
+            .document(id)
+            .setData([
+                "title": cleanTitle,
+                "dueAt": Timestamp(date: dueAt),
+                "isDone": false,
+                "createdAt": Timestamp(date: Date())
+            ]) { error in
+                if let error {
+                    print("REMINDER FIREBASE ERROR:", error.localizedDescription)
+                } else {
+                    print("REMINDER SAVED FIREBASE:", id)
+                    dismiss()
+                }
+            }
     }
 }
