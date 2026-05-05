@@ -3,21 +3,31 @@ import Combine
 import FirebaseAuth
 import FirebaseCore
 
+// This class manages authentication (login, signup, logout)
 final class AuthStore: ObservableObject {
+    
+    // Tracks if user is logged in
     @Published var isLoggedIn: Bool = false
+    
+    // Stores current user's email
     @Published var currentEmail: String? = nil
+    
+    // Stores current user's ID
     @Published var currentUserId: String? = nil
 
+    // Listener for auth state changes
     private var authStateHandle: AuthStateDidChangeListenerHandle?
 
     init() {
+        // Configure Firebase if not already done
         if FirebaseApp.app() == nil {
             FirebaseApp.configure()
         }
 
+        // Listen for login/logout changes
         authStateHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
             DispatchQueue.main.async {
-                self?.isLoggedIn = (user != nil)
+                self?.isLoggedIn = user != nil
                 self?.currentEmail = user?.email
                 self?.currentUserId = user?.uid
             }
@@ -25,36 +35,40 @@ final class AuthStore: ObservableObject {
     }
 
     deinit {
+        // Remove listener when object is destroyed
         if let handle = authStateHandle {
             Auth.auth().removeStateDidChangeListener(handle)
         }
     }
 
-    func createAccount(
-        email: String,
-        password: String,
-        completion: @escaping (Bool, String?) -> Void
-    ) {
-        let e = normalize(email)
-        let p = password.trimmingCharacters(in: .whitespacesAndNewlines)
+    // Create a new account
+    func createAccount(email: String, password: String, completion: @escaping (Bool, String?) -> Void) {
+        
+        // Clean email and password
+        let email = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let password = password.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard isValidEmail(e) else {
-            completion(false, "Enter a valid email address.")
+        // Check valid email
+        guard email.contains("@"), email.contains(".") else {
+            completion(false, "Enter a valid email.")
             return
         }
 
-        guard p.count >= 6 else {
+        // Check password length
+        guard password.count >= 6 else {
             completion(false, "Password must be at least 6 characters.")
             return
         }
 
-        Auth.auth().createUser(withEmail: e, password: p) { [weak self] result, error in
+        // Create user using Firebase
+        Auth.auth().createUser(withEmail: email, password: password) { [weak self] result, error in
             DispatchQueue.main.async {
-                if let error = error {
+                if let error {
                     completion(false, error.localizedDescription)
                     return
                 }
 
+                // Update user info after signup
                 self?.isLoggedIn = true
                 self?.currentEmail = result?.user.email
                 self?.currentUserId = result?.user.uid
@@ -63,31 +77,22 @@ final class AuthStore: ObservableObject {
         }
     }
 
-    func login(
-        email: String,
-        password: String,
-        completion: @escaping (Bool, String?) -> Void
-    ) {
-        let e = normalize(email)
-        let p = password.trimmingCharacters(in: .whitespacesAndNewlines)
+    // Login existing user
+    func login(email: String, password: String, completion: @escaping (Bool, String?) -> Void) {
+        
+        // Clean input
+        let email = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let password = password.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard isValidEmail(e) else {
-            completion(false, "Enter a valid email address.")
-            return
-        }
-
-        guard !p.isEmpty else {
-            completion(false, "Password cannot be empty.")
-            return
-        }
-
-        Auth.auth().signIn(withEmail: e, password: p) { [weak self] result, error in
+        // Sign in with Firebase
+        Auth.auth().signIn(withEmail: email, password: password) { [weak self] result, error in
             DispatchQueue.main.async {
-                if let error = error {
+                if let error {
                     completion(false, error.localizedDescription)
                     return
                 }
 
+                // Update user info after login
                 self?.isLoggedIn = true
                 self?.currentEmail = result?.user.email
                 self?.currentUserId = result?.user.uid
@@ -96,46 +101,38 @@ final class AuthStore: ObservableObject {
         }
     }
 
+    // Logout current user
     func logout(completion: ((Bool, String?) -> Void)? = nil) {
         do {
+            // Sign out from Firebase
             try Auth.auth().signOut()
-            DispatchQueue.main.async {
-                self.isLoggedIn = false
-                self.currentEmail = nil
-                self.currentUserId = nil
-                completion?(true, nil)
-            }
+            
+            // Clear user data
+            isLoggedIn = false
+            currentEmail = nil
+            currentUserId = nil
+            
+            completion?(true, nil)
         } catch {
-            DispatchQueue.main.async {
-                completion?(false, error.localizedDescription)
-            }
+            completion?(false, error.localizedDescription)
         }
     }
 
+    // Send password reset email
     func resetPassword(email: String, completion: @escaping (Bool, String?) -> Void) {
-        let e = normalize(email)
+        
+        // Clean email
+        let email = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
-        guard isValidEmail(e) else {
-            completion(false, "Enter a valid email address.")
-            return
-        }
-
-        Auth.auth().sendPasswordReset(withEmail: e) { error in
+        // Request password reset
+        Auth.auth().sendPasswordReset(withEmail: email) { error in
             DispatchQueue.main.async {
-                if let error = error {
+                if let error {
                     completion(false, error.localizedDescription)
                 } else {
                     completion(true, nil)
                 }
             }
         }
-    }
-
-    private func normalize(_ email: String) -> String {
-        email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
-
-    private func isValidEmail(_ s: String) -> Bool {
-        s.contains("@") && s.contains(".") && s.count >= 5
     }
 }
