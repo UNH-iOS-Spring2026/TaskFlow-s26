@@ -2,7 +2,7 @@
 
 import Foundation
 import Combine
-import SwiftUI
+import FirebaseAuth
 import FirebaseFirestore
 
 
@@ -22,8 +22,8 @@ final class AppStore: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     private var notesListener: ListenerRegistration?
-    private var tasksListener: ListenerRegistration?
     private var remindersListener: ListenerRegistration?
+    private var tasksListener: ListenerRegistration?
     private var workSessionsListener: ListenerRegistration?
     private var expensesListener: ListenerRegistration?
     private var goalsListener: ListenerRegistration?
@@ -31,439 +31,288 @@ final class AppStore: ObservableObject {
 
     init(auth: AuthStore) {
         self.auth = auth
-        bindAuth()
-        handleAuthChange(uid: auth.currentUserId)
-    }
 
-    deinit {
-        removeAllListeners()
-    }
-
-    private func bindAuth() {
         auth.$currentUserId
             .receive(on: DispatchQueue.main)
             .sink { [weak self] uid in
-                self?.handleAuthChange(uid: uid)
+                self?.setupUser(uid)
             }
             .store(in: &cancellables)
+
+        setupUser(auth.currentUserId)
     }
 
-    private func handleAuthChange(uid: String?) {
-        removeAllListeners()
+    deinit {
+        removeListeners()
+    }
+
+    private func setupUser(_ uid: String?) {
+        removeListeners()
 
         guard let uid, !uid.isEmpty else {
-            print("❌ AppStore: No logged-in user")
-            clearAllData()
+            notes = []
+            reminders = []
+            tasks = []
+            workSessions = []
+            expenses = []
+            goalRecords = []
+            habits = []
             return
         }
 
-        print("✅ AppStore UID:", uid)
+        print("APPSTORE USING UID:", uid)
 
-        ensureUserDocument(uid: uid) { [weak self] ok in
-            guard let self else { return }
+        db.collection("taskflowData").document(uid).setData([
+            "uid": uid,
+            "email": auth.currentEmail ?? "",
+            "updatedAt": FieldValue.serverTimestamp()
+        ], merge: true)
 
-            if ok {
-                self.startNotesListener(uid: uid)
-                self.startTasksListener(uid: uid)
-                self.startRemindersListener(uid: uid)
-                self.startWorkSessionsListener(uid: uid)
-                self.startExpensesListener(uid: uid)
-                self.startGoalsListener(uid: uid)
-                self.startHabitsListener(uid: uid)
-            } else {
-                print("❌ Failed to create user document")
-            }
-        }
-    }
-    // Clears all local data when user logs out
-    
-    private func clearAllData() {
-        notes = []
-        reminders = []
-        tasks = []
-        workSessions = []
-        expenses = []
-        goalRecords = []
-        habits = []
+        listenNotes(uid)
+        listenReminders(uid)
+        listenTasks(uid)
+        listenWorkSessions(uid)
+        listenExpenses(uid)
+        listenGoals(uid)
+        listenHabits(uid)
     }
 
-    private func removeAllListeners() {
+    private func removeListeners() {
         notesListener?.remove()
-        tasksListener?.remove()
         remindersListener?.remove()
+        tasksListener?.remove()
         workSessionsListener?.remove()
         expensesListener?.remove()
         goalsListener?.remove()
         habitsListener?.remove()
-
-        notesListener = nil
-        tasksListener = nil
-        remindersListener = nil
-        workSessionsListener = nil
-        expensesListener = nil
-        goalsListener = nil
-        habitsListener = nil
-    }
-    
-    // Ensures a user document exists in firestore
-    
-    private func ensureUserDocument(uid: String, completion: @escaping (Bool) -> Void) {
-        let payload: [String: Any] = [
-            "uid": uid,
-            "email": auth.currentEmail ?? "",
-            "updatedAt": FieldValue.serverTimestamp(),
-            "createdAt": FieldValue.serverTimestamp()
-        ]
-
-        db.collection("users").document(uid).setData(payload, merge: true) { error in
-            DispatchQueue.main.async {
-                if let error {
-                    print("❌ USER DOC ERROR:", error.localizedDescription)
-                    completion(false)
-                } else {
-                    print("✅ User document ready")
-                    completion(true)
-                }
-            }
-        }
     }
 
-    // Ensures for having a valid User ID
-    
-    private func requireUID() -> String? {
+    private func currentUID() -> String? {
         guard let uid = auth.currentUserId, !uid.isEmpty else {
-            print("❌ NO USER ID FOUND")
+            print("FIREBASE SAVE ERROR: No logged-in user UID")
             return nil
         }
-
-        print("✅ UID:", uid)
         return uid
     }
 
-    private func collection(_ name: String, uid: String) -> CollectionReference {
-        db.collection("users").document(uid).collection(name)
+    private func col(_ name: String, _ uid: String) -> CollectionReference {
+        db.collection("taskflowData").document(uid).collection(name)
     }
 
-    private func document(_ name: String, uid: String, id: UUID) -> DocumentReference {
-        collection(name, uid: uid).document(id.uuidString)
+    private func doc(_ name: String, _ uid: String, _ id: UUID) -> DocumentReference {
+        col(name, uid).document(id.uuidString.uppercased())
     }
-     
-    // Extracts date from Firestore data
-    
-    private func date(_ data: [String: Any], _ key: String, fallback: Date = Date()) -> Date {
+
+    private func readDate(_ data: [String: Any], _ key: String, fallback: Date = Date()) -> Date {
         if let timestamp = data[key] as? Timestamp {
             return timestamp.dateValue()
         }
-
-        if let date = data[key] as? Date {
-            return date
-        }
-
         return fallback
     }
 
     // MARK: - Listeners
 
-    private func startNotesListener(uid: String) {
-        notesListener = collection("notes", uid: uid)
-            .order(by: "createdAt", descending: true)
-            .addSnapshotListener { [weak self] snapshot, error in
-                if let error {
-                    print("❌ NOTES LISTENER ERROR:", error.localizedDescription)
-                    return
-                }
-
-                let items = snapshot?.documents.compactMap {
-                    self?.decodeNote($0)
-                } ?? []
-
-                DispatchQueue.main.async {
-                    self?.notes = items
-                }
+    private func listenNotes(_ uid: String) {
+        notesListener = col("notes", uid).addSnapshotListener { [weak self] snap, error in
+            if let error {
+                print("NOTES LISTENER ERROR:", error.localizedDescription)
+                return
             }
-    }
 
-    private func startTasksListener(uid: String) {
-        tasksListener = collection("tasks", uid: uid)
-            .order(by: "createdAt", descending: true)
-            .addSnapshotListener { [weak self] snapshot, error in
-                if let error {
-                    print("❌ TASKS LISTENER ERROR:", error.localizedDescription)
-                    return
-                }
+            let documents = snap?.documents.filter { $0.documentID != "_init" } ?? []
 
-                let items = snapshot?.documents.compactMap {
-                    self?.decodeTask($0)
-                } ?? []
-
-                DispatchQueue.main.async {
-                    self?.tasks = items
-                }
-            }
-    }
-
-    private func startRemindersListener(uid: String) {
-        remindersListener = collection("reminders", uid: uid)
-            .order(by: "dueAt", descending: false)
-            .addSnapshotListener { [weak self] snapshot, error in
-                if let error {
-                    print("❌ REMINDERS LISTENER ERROR:", error.localizedDescription)
-                    return
-                }
-
-                let items = snapshot?.documents.compactMap {
-                    self?.decodeReminder($0)
-                } ?? []
-
-                DispatchQueue.main.async {
-                    self?.reminders = items
-                }
-            }
-    }
-
-    private func startWorkSessionsListener(uid: String) {
-        workSessionsListener = collection("workSessions", uid: uid)
-            .order(by: "date", descending: true)
-            .addSnapshotListener { [weak self] snapshot, error in
-                if let error {
-                    print("❌ WORK SESSIONS LISTENER ERROR:", error.localizedDescription)
-                    return
-                }
-
-                let items = snapshot?.documents.compactMap {
-                    self?.decodeWorkSession($0)
-                } ?? []
-
-                DispatchQueue.main.async {
-                    self?.workSessions = items
-                    print("✅ Work sessions loaded:", items.count)
-                }
-            }
-    }
-
-    private func startExpensesListener(uid: String) {
-        expensesListener = collection("expenses", uid: uid)
-            .order(by: "date", descending: true)
-            .addSnapshotListener { [weak self] snapshot, error in
-                if let error {
-                    print("❌ EXPENSES LISTENER ERROR:", error.localizedDescription)
-                    return
-                }
-
-                let items = snapshot?.documents.compactMap {
-                    self?.decodeExpense($0)
-                } ?? []
-
-                DispatchQueue.main.async {
-                    self?.expenses = items
-                    print("✅ Expenses loaded:", items.count)
-                }
-            }
-    }
-
-    private func startGoalsListener(uid: String) {
-        goalsListener = collection("goals", uid: uid)
-            .order(by: "targetDate", descending: false)
-            .addSnapshotListener { [weak self] snapshot, error in
-                if let error {
-                    print("❌ GOALS LISTENER ERROR:", error.localizedDescription)
-                    return
-                }
-
-                let items = snapshot?.documents.compactMap {
-                    self?.decodeGoal($0)
-                } ?? []
-
-                DispatchQueue.main.async {
-                    self?.goalRecords = items
-                    print("✅ Goals loaded:", items.count)
-                }
-            }
-    }
-
-    private func startHabitsListener(uid: String) {
-        habitsListener = collection("habits", uid: uid)
-            .order(by: "createdAt", descending: true)
-            .addSnapshotListener { [weak self] snapshot, error in
-                if let error {
-                    print("❌ HABITS LISTENER ERROR:", error.localizedDescription)
-                    return
-                }
-
-                let items = snapshot?.documents.compactMap {
-                    self?.decodeHabit($0)
-                } ?? []
-
-                DispatchQueue.main.async {
-                    self?.habits = items
-                    print("✅ Habits loaded:", items.count)
-                }
-            }
-    }
-
-    // MARK: - Decode
-
-    private func decodeNote(_ doc: DocumentSnapshot) -> NoteItem? {
-        let data = doc.data() ?? [:]
-
-        return NoteItem(
-            id: UUID(uuidString: doc.documentID) ?? UUID(),
-            title: data["title"] as? String ?? "",
-            body: data["body"] as? String ?? "",
-            createdAt: date(data, "createdAt"),
-            colorSeed: data["colorSeed"] as? Int ?? 0
-        )
-    }
-
-    private func decodeTask(_ doc: DocumentSnapshot) -> TaskItem? {
-        let data = doc.data() ?? [:]
-
-        return TaskItem(
-            id: UUID(uuidString: doc.documentID) ?? UUID(),
-            title: data["title"] as? String ?? "",
-            isDone: data["isDone"] as? Bool ?? false,
-            createdAt: date(data, "createdAt")
-        )
-    }
-
-    private func decodeReminder(_ doc: DocumentSnapshot) -> ReminderItem? {
-        let data = doc.data() ?? [:]
-
-        return ReminderItem(
-            id: UUID(uuidString: doc.documentID) ?? UUID(),
-            title: data["title"] as? String ?? "",
-            dueAt: date(data, "dueAt"),
-            isDone: data["isDone"] as? Bool ?? false,
-            createdAt: date(data, "createdAt")
-        )
-    }
-
-    private func decodeWorkSession(_ doc: DocumentSnapshot) -> WorkSessionRecord? {
-        let data = doc.data() ?? [:]
-
-        return WorkSessionRecord(
-            id: UUID(uuidString: doc.documentID) ?? UUID(),
-            date: date(data, "date"),
-            startTime: date(data, "startTime"),
-            endTime: date(data, "endTime"),
-            hourlyPay: data["hourlyPay"] as? Double ?? 0,
-            notes: data["notes"] as? String ?? ""
-        )
-    }
-
-    private func decodeExpense(_ doc: DocumentSnapshot) -> ExpenseRecord? {
-        let data = doc.data() ?? [:]
-        let rawType = data["type"] as? String ?? ExpenseType.other.rawValue
-
-        return ExpenseRecord(
-            id: UUID(uuidString: doc.documentID) ?? UUID(),
-            date: date(data, "date"),
-            name: data["name"] as? String ?? "Expense",
-            type: ExpenseType(rawValue: rawType) ?? .other,
-            whereUsed: data["whereUsed"] as? String ?? "",
-            amount: data["amount"] as? Double ?? 0
-        )
-    }
-
-    private func decodeGoal(_ doc: DocumentSnapshot) -> GoalRecord? {
-        let data = doc.data() ?? [:]
-
-        return GoalRecord(
-            id: UUID(uuidString: doc.documentID) ?? UUID(),
-            goalName: data["goalName"] as? String ?? "",
-            goalDescription: data["goalDescription"] as? String ?? "",
-            targetDate: date(data, "targetDate")
-        )
-    }
-
-    private func decodeHabit(_ doc: DocumentSnapshot) -> HabitItem? {
-        let data = doc.data() ?? [:]
-        let lastCompleted = (data["lastCompleted"] as? Timestamp)?.dateValue()
-
-        return HabitItem(
-            id: UUID(uuidString: doc.documentID) ?? UUID(),
-            title: data["title"] as? String ?? "",
-            streak: data["streak"] as? Int ?? 0,
-            lastCompleted: lastCompleted,
-            createdAt: date(data, "createdAt"),
-            isCompletedToday: data["isCompletedToday"] as? Bool ?? false
-        )
-    }
-
-    // MARK: - Notes
-
-    func addNote(title: String, body: String, colorSeed: Int = Int.random(in: 0...5), completion: ((Bool) -> Void)? = nil) {
-        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !cleanTitle.isEmpty || !cleanBody.isEmpty, let uid = requireUID() else {
-            completion?(false)
-            return
-        }
-
-        let note = NoteItem(
-            title: cleanTitle.isEmpty ? "Untitled" : cleanTitle,
-            body: cleanBody,
-            createdAt: Date(),
-            colorSeed: colorSeed
-        )
-
-        document("notes", uid: uid, id: note.id).setData([
-            "title": note.title,
-            "body": note.body,
-            "colorSeed": note.colorSeed,
-            "createdAt": Timestamp(date: note.createdAt)
-        ]) { error in
             DispatchQueue.main.async {
-                if let error {
-                    print("❌ Add note failed:", error.localizedDescription)
-                    completion?(false)
-                } else {
-                    print("✅ Note saved")
-                    completion?(true)
+                if documents.isEmpty {
+                    self?.notes = []
+                    return
+                }
+
+                self?.notes = documents.map { doc in
+                    let d = doc.data()
+                    return NoteItem(
+                        id: UUID(uuidString: doc.documentID) ?? UUID(),
+                        title: d["title"] as? String ?? "",
+                        body: d["body"] as? String ?? "",
+                        createdAt: self?.readDate(d, "createdAt") ?? Date(),
+                        colorSeed: d["colorSeed"] as? Int ?? 0
+                    )
                 }
             }
         }
     }
 
-    func updateNote(_ note: NoteItem, completion: ((Bool) -> Void)? = nil) {
-        guard let uid = requireUID() else {
-            completion?(false)
-            return
-        }
+    private func listenReminders(_ uid: String) {
+        remindersListener = col("reminders", uid).addSnapshotListener { [weak self] snap, error in
+            if let error {
+                print("REMINDERS LISTENER ERROR:", error.localizedDescription)
+                return
+            }
 
-        document("notes", uid: uid, id: note.id).setData([
-            "title": note.title,
-            "body": note.body,
-            "colorSeed": note.colorSeed,
-            "createdAt": Timestamp(date: note.createdAt)
-        ], merge: true) { error in
+            let documents = snap?.documents.filter { $0.documentID != "_init" } ?? []
+
             DispatchQueue.main.async {
-                if let error {
-                    print("❌ Update note failed:", error.localizedDescription)
-                    completion?(false)
-                } else {
-                    print("✅ Note updated")
-                    completion?(true)
+                if documents.isEmpty {
+                    self?.reminders = []
+                    return
+                }
+
+                self?.reminders = documents.map { doc in
+                    let d = doc.data()
+                    return ReminderItem(
+                        id: UUID(uuidString: doc.documentID) ?? UUID(),
+                        title: d["title"] as? String ?? "",
+                        dueAt: self?.readDate(d, "dueAt") ?? Date(),
+                        isDone: d["isDone"] as? Bool ?? false,
+                        createdAt: self?.readDate(d, "createdAt") ?? Date()
+                    )
                 }
             }
         }
     }
 
-    func deleteNote(_ note: NoteItem, completion: ((Bool) -> Void)? = nil) {
-        guard let uid = requireUID() else {
-            completion?(false)
-            return
-        }
+    private func listenTasks(_ uid: String) {
+        tasksListener = col("tasks", uid).addSnapshotListener { [weak self] snap, error in
+            if let error {
+                print("TASKS LISTENER ERROR:", error.localizedDescription)
+                return
+            }
 
-        document("notes", uid: uid, id: note.id).delete { error in
+            let documents = snap?.documents.filter { $0.documentID != "_init" } ?? []
+
             DispatchQueue.main.async {
-                if let error {
-                    print("❌ Delete note failed:", error.localizedDescription)
-                    completion?(false)
-                } else {
-                    print("✅ Note deleted")
-                    completion?(true)
+                if documents.isEmpty {
+                    self?.tasks = []
+                    return
+                }
+
+                self?.tasks = documents.map { doc in
+                    let d = doc.data()
+                    return TaskItem(
+                        id: UUID(uuidString: doc.documentID) ?? UUID(),
+                        title: d["title"] as? String ?? "",
+                        isDone: d["isDone"] as? Bool ?? false,
+                        createdAt: self?.readDate(d, "createdAt") ?? Date()
+                    )
+                }
+            }
+        }
+    }
+
+    private func listenWorkSessions(_ uid: String) {
+        workSessionsListener = col("workSessions", uid).addSnapshotListener { [weak self] snap, error in
+            if let error {
+                print("WORK LISTENER ERROR:", error.localizedDescription)
+                return
+            }
+
+            let documents = snap?.documents.filter { $0.documentID != "_init" } ?? []
+
+            DispatchQueue.main.async {
+                if documents.isEmpty {
+                    self?.workSessions = []
+                    return
+                }
+
+                self?.workSessions = documents.map { doc in
+                    let d = doc.data()
+                    return WorkSessionRecord(
+                        id: UUID(uuidString: doc.documentID) ?? UUID(),
+                        date: self?.readDate(d, "date") ?? Date(),
+                        startTime: self?.readDate(d, "startTime") ?? Date(),
+                        endTime: self?.readDate(d, "endTime") ?? Date(),
+                        hourlyPay: d["hourlyPay"] as? Double ?? 0,
+                        notes: d["notes"] as? String ?? ""
+                    )
+                }
+            }
+        }
+    }
+
+    private func listenExpenses(_ uid: String) {
+        expensesListener = col("expenses", uid).addSnapshotListener { [weak self] snap, error in
+            if let error {
+                print("EXPENSES LISTENER ERROR:", error.localizedDescription)
+                return
+            }
+
+            let documents = snap?.documents.filter { $0.documentID != "_init" } ?? []
+
+            DispatchQueue.main.async {
+                if documents.isEmpty {
+                    self?.expenses = []
+                    return
+                }
+
+                self?.expenses = documents.map { doc in
+                    let d = doc.data()
+                    let rawType = d["type"] as? String ?? ExpenseType.other.rawValue
+
+                    return ExpenseRecord(
+                        id: UUID(uuidString: doc.documentID) ?? UUID(),
+                        date: self?.readDate(d, "date") ?? Date(),
+                        name: d["name"] as? String ?? "Expense",
+                        type: ExpenseType(rawValue: rawType) ?? .other,
+                        whereUsed: d["whereUsed"] as? String ?? "",
+                        amount: d["amount"] as? Double ?? 0
+                    )
+                }
+            }
+        }
+    }
+
+    private func listenGoals(_ uid: String) {
+        goalsListener = col("goals", uid).addSnapshotListener { [weak self] snap, error in
+            if let error {
+                print("GOALS LISTENER ERROR:", error.localizedDescription)
+                return
+            }
+
+            let documents = snap?.documents.filter { $0.documentID != "_init" } ?? []
+
+            DispatchQueue.main.async {
+                if documents.isEmpty {
+                    self?.goalRecords = []
+                    return
+                }
+
+                self?.goalRecords = documents.map { doc in
+                    let d = doc.data()
+                    return GoalRecord(
+                        id: UUID(uuidString: doc.documentID) ?? UUID(),
+                        goalName: d["goalName"] as? String ?? "",
+                        goalDescription: d["goalDescription"] as? String ?? "",
+                        targetDate: self?.readDate(d, "targetDate") ?? Date()
+                    )
+                }
+            }
+        }
+    }
+
+    private func listenHabits(_ uid: String) {
+        habitsListener = col("habits", uid).addSnapshotListener { [weak self] snap, error in
+            if let error {
+                print("HABITS LISTENER ERROR:", error.localizedDescription)
+                return
+            }
+
+            let documents = snap?.documents.filter { $0.documentID != "_init" } ?? []
+
+            DispatchQueue.main.async {
+                if documents.isEmpty {
+                    self?.habits = []
+                    return
+                }
+
+                self?.habits = documents.map { doc in
+                    let d = doc.data()
+                    return HabitItem(
+                        id: UUID(uuidString: doc.documentID) ?? UUID(),
+                        title: d["title"] as? String ?? "",
+                        streak: d["streak"] as? Int ?? 0,
+                        lastCompleted: (d["lastCompleted"] as? Timestamp)?.dateValue(),
+                        createdAt: self?.readDate(d, "createdAt") ?? Date(),
+                        isCompletedToday: d["isCompletedToday"] as? Bool ?? false
+                    )
                 }
             }
         }
@@ -472,336 +321,365 @@ final class AppStore: ObservableObject {
     // MARK: - Tasks
 
     func addTask(title: String, completion: ((Bool) -> Void)? = nil) {
-        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !cleanTitle.isEmpty, let uid = requireUID() else {
+        guard let uid = currentUID() else {
             completion?(false)
             return
         }
 
-        let task = TaskItem(title: cleanTitle, isDone: false, createdAt: Date())
+        let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else {
+            completion?(false)
+            return
+        }
 
-        document("tasks", uid: uid, id: task.id).setData([
-            "title": task.title,
-            "isDone": task.isDone,
-            "createdAt": Timestamp(date: task.createdAt)
+        let item = TaskItem(title: clean, isDone: false, createdAt: Date())
+
+        doc("tasks", uid, item.id).setData([
+            "title": item.title,
+            "isDone": item.isDone,
+            "createdAt": Timestamp(date: item.createdAt)
         ]) { error in
-            DispatchQueue.main.async {
-                if let error {
-                    print("❌ Add task failed:", error.localizedDescription)
-                    completion?(false)
-                } else {
-                    print("✅ Task saved")
-                    completion?(true)
-                }
+            if let error {
+                print("FIREBASE SAVE ERROR TASK:", error.localizedDescription)
+            } else {
+                print("TASK SAVED FIREBASE:", item.id.uuidString.uppercased())
             }
+            DispatchQueue.main.async { completion?(error == nil) }
         }
     }
 
     func updateTask(_ task: TaskItem, completion: ((Bool) -> Void)? = nil) {
-        guard let uid = requireUID() else {
+        guard let uid = currentUID() else {
             completion?(false)
             return
         }
 
-        document("tasks", uid: uid, id: task.id).setData([
+        doc("tasks", uid, task.id).setData([
             "title": task.title,
             "isDone": task.isDone,
             "createdAt": Timestamp(date: task.createdAt)
         ], merge: true) { error in
-            DispatchQueue.main.async {
-                if let error {
-                    print("❌ Update task failed:", error.localizedDescription)
-                    completion?(false)
-                } else {
-                    print("✅ Task updated")
-                    completion?(true)
-                }
+            if let error {
+                print("FIREBASE UPDATE ERROR TASK:", error.localizedDescription)
             }
+            DispatchQueue.main.async { completion?(error == nil) }
         }
     }
 
     func toggleTask(_ task: TaskItem, completion: ((Bool) -> Void)? = nil) {
-        var updatedTask = task
-        updatedTask.isDone.toggle()
-        updateTask(updatedTask, completion: completion)
+        var updated = task
+        updated.isDone.toggle()
+        updateTask(updated, completion: completion)
     }
 
     func deleteTask(_ task: TaskItem, completion: ((Bool) -> Void)? = nil) {
-        guard let uid = requireUID() else {
+        guard let uid = currentUID() else {
             completion?(false)
             return
         }
 
-        document("tasks", uid: uid, id: task.id).delete { error in
-            DispatchQueue.main.async {
-                if let error {
-                    print("❌ Delete task failed:", error.localizedDescription)
-                    completion?(false)
-                } else {
-                    print("✅ Task deleted")
-                    completion?(true)
-                }
+        doc("tasks", uid, task.id).delete { error in
+            if let error {
+                print("FIREBASE DELETE ERROR TASK:", error.localizedDescription)
             }
+            DispatchQueue.main.async { completion?(error == nil) }
         }
     }
 
     // MARK: - Reminders
 
     func addReminder(title: String, dueAt: Date, completion: ((Bool) -> Void)? = nil) {
-        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !cleanTitle.isEmpty, let uid = requireUID() else {
+        guard let uid = currentUID() else {
             completion?(false)
             return
         }
 
-        let reminder = ReminderItem(
-            title: cleanTitle,
-            dueAt: dueAt,
-            isDone: false,
-            createdAt: Date()
-        )
+        let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else {
+            completion?(false)
+            return
+        }
 
-        document("reminders", uid: uid, id: reminder.id).setData([
-            "title": reminder.title,
-            "dueAt": Timestamp(date: reminder.dueAt),
-            "isDone": reminder.isDone,
-            "createdAt": Timestamp(date: reminder.createdAt)
+        let item = ReminderItem(title: clean, dueAt: dueAt, isDone: false, createdAt: Date())
+
+        doc("reminders", uid, item.id).setData([
+            "title": item.title,
+            "dueAt": Timestamp(date: item.dueAt),
+            "isDone": item.isDone,
+            "createdAt": Timestamp(date: item.createdAt)
         ]) { error in
-            DispatchQueue.main.async {
-                if let error {
-                    print("❌ Add reminder failed:", error.localizedDescription)
-                    completion?(false)
-                } else {
-                    print("✅ Reminder saved")
-                    completion?(true)
-                }
+            if let error {
+                print("FIREBASE SAVE ERROR REMINDER:", error.localizedDescription)
+            } else {
+                print("REMINDER SAVED FIREBASE:", item.id.uuidString.uppercased())
             }
+            DispatchQueue.main.async { completion?(error == nil) }
         }
     }
 
     func updateReminder(_ reminder: ReminderItem, completion: ((Bool) -> Void)? = nil) {
-        guard let uid = requireUID() else {
+        guard let uid = currentUID() else {
             completion?(false)
             return
         }
 
-        document("reminders", uid: uid, id: reminder.id).setData([
+        doc("reminders", uid, reminder.id).setData([
             "title": reminder.title,
             "dueAt": Timestamp(date: reminder.dueAt),
             "isDone": reminder.isDone,
             "createdAt": Timestamp(date: reminder.createdAt)
         ], merge: true) { error in
-            DispatchQueue.main.async {
-                if let error {
-                    print("❌ Update reminder failed:", error.localizedDescription)
-                    completion?(false)
-                } else {
-                    print("✅ Reminder updated")
-                    completion?(true)
-                }
+            if let error {
+                print("FIREBASE UPDATE ERROR REMINDER:", error.localizedDescription)
             }
+            DispatchQueue.main.async { completion?(error == nil) }
         }
     }
 
     func toggleReminder(_ reminder: ReminderItem, completion: ((Bool) -> Void)? = nil) {
-        var updatedReminder = reminder
-        updatedReminder.isDone.toggle()
-        updateReminder(updatedReminder, completion: completion)
+        var updated = reminder
+        updated.isDone.toggle()
+        updateReminder(updated, completion: completion)
     }
 
     func deleteReminder(_ reminder: ReminderItem, completion: ((Bool) -> Void)? = nil) {
-        guard let uid = requireUID() else {
+        guard let uid = currentUID() else {
             completion?(false)
             return
         }
 
-        document("reminders", uid: uid, id: reminder.id).delete { error in
-            DispatchQueue.main.async {
-                if let error {
-                    print("❌ Delete reminder failed:", error.localizedDescription)
-                    completion?(false)
-                } else {
-                    print("✅ Reminder deleted")
-                    completion?(true)
-                }
+        doc("reminders", uid, reminder.id).delete { error in
+            if let error {
+                print("FIREBASE DELETE ERROR REMINDER:", error.localizedDescription)
             }
+            DispatchQueue.main.async { completion?(error == nil) }
         }
     }
 
-    // MARK: - Work Hours
+    // MARK: - Notes
 
-    func addWorkSession(_ session: WorkSessionRecord, completion: ((String?) -> Void)? = nil) {
-        guard let uid = requireUID() else {
-            completion?("No authenticated user")
+    func addNote(
+        title: String,
+        body: String,
+        colorSeed: Int = Int.random(in: 0...10_000),
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        guard let uid = currentUID() else {
+            completion?(false)
             return
         }
 
-        document("workSessions", uid: uid, id: session.id).setData([
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleanTitle.isEmpty || !cleanBody.isEmpty else {
+            completion?(false)
+            return
+        }
+
+        let item = NoteItem(
+            title: cleanTitle.isEmpty ? "Untitled" : cleanTitle,
+            body: cleanBody,
+            createdAt: Date(),
+            colorSeed: colorSeed
+        )
+
+        doc("notes", uid, item.id).setData([
+            "title": item.title,
+            "body": item.body,
+            "colorSeed": item.colorSeed,
+            "createdAt": Timestamp(date: item.createdAt)
+        ]) { error in
+            if let error {
+                print("FIREBASE SAVE ERROR NOTE:", error.localizedDescription)
+            } else {
+                print("NOTE SAVED FIREBASE:", item.id.uuidString.uppercased())
+            }
+            DispatchQueue.main.async { completion?(error == nil) }
+        }
+    }
+
+    func updateNote(_ note: NoteItem, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = currentUID() else {
+            completion?(false)
+            return
+        }
+
+        doc("notes", uid, note.id).setData([
+            "title": note.title,
+            "body": note.body,
+            "colorSeed": note.colorSeed,
+            "createdAt": Timestamp(date: note.createdAt)
+        ], merge: true) { error in
+            if let error {
+                print("FIREBASE UPDATE ERROR NOTE:", error.localizedDescription)
+            }
+            DispatchQueue.main.async { completion?(error == nil) }
+        }
+    }
+
+    func deleteNote(_ note: NoteItem, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = currentUID() else {
+            completion?(false)
+            return
+        }
+
+        doc("notes", uid, note.id).delete { error in
+            if let error {
+                print("FIREBASE DELETE ERROR NOTE:", error.localizedDescription)
+            }
+            DispatchQueue.main.async { completion?(error == nil) }
+        }
+    }
+
+    // MARK: - Work Sessions
+
+    func addWorkSession(_ session: WorkSessionRecord, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = currentUID() else {
+            completion?(false)
+            return
+        }
+
+        doc("workSessions", uid, session.id).setData([
             "date": Timestamp(date: session.date),
             "startTime": Timestamp(date: session.startTime),
             "endTime": Timestamp(date: session.endTime),
             "hourlyPay": session.hourlyPay,
             "notes": session.notes
         ]) { error in
-            DispatchQueue.main.async {
-                if let error {
-                    print("❌ Add work session failed:", error.localizedDescription)
-                    completion?(error.localizedDescription)
-                } else {
-                    print("✅ Work session saved")
-                    completion?(nil)
-                }
+            if let error {
+                print("FIREBASE SAVE ERROR WORK:", error.localizedDescription)
+            } else {
+                print("WORK SAVED FIREBASE:", session.id.uuidString.uppercased())
             }
+            DispatchQueue.main.async { completion?(error == nil) }
         }
     }
 
-    func deleteWorkSession(_ session: WorkSessionRecord, completion: ((String?) -> Void)? = nil) {
-        guard let uid = requireUID() else {
-            completion?("No authenticated user")
+    func deleteWorkSession(_ session: WorkSessionRecord, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = currentUID() else {
+            completion?(false)
             return
         }
 
-        document("workSessions", uid: uid, id: session.id).delete { error in
-            DispatchQueue.main.async {
-                if let error {
-                    print("❌ Delete work session failed:", error.localizedDescription)
-                    completion?(error.localizedDescription)
-                } else {
-                    print("✅ Work session deleted")
-                    completion?(nil)
-                }
+        doc("workSessions", uid, session.id).delete { error in
+            if let error {
+                print("FIREBASE DELETE ERROR WORK:", error.localizedDescription)
             }
+            DispatchQueue.main.async { completion?(error == nil) }
         }
     }
 
     // MARK: - Expenses
 
-    func addExpense(_ expense: ExpenseRecord, completion: ((String?) -> Void)? = nil) {
-        guard let uid = requireUID() else {
-            completion?("No authenticated user")
+    func addExpense(_ expense: ExpenseRecord, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = currentUID() else {
+            completion?(false)
             return
         }
 
-        document("expenses", uid: uid, id: expense.id).setData([
+        doc("expenses", uid, expense.id).setData([
             "date": Timestamp(date: expense.date),
             "name": expense.name,
             "type": expense.type.rawValue,
             "whereUsed": expense.whereUsed,
             "amount": expense.amount
         ]) { error in
-            DispatchQueue.main.async {
-                if let error {
-                    print("❌ Add expense failed:", error.localizedDescription)
-                    completion?(error.localizedDescription)
-                } else {
-                    print("✅ Expense saved")
-                    completion?(nil)
-                }
+            if let error {
+                print("FIREBASE SAVE ERROR EXPENSE:", error.localizedDescription)
+            } else {
+                print("EXPENSE SAVED FIREBASE:", expense.id.uuidString.uppercased())
             }
+            DispatchQueue.main.async { completion?(error == nil) }
         }
     }
 
-    func deleteExpense(_ expense: ExpenseRecord, completion: ((String?) -> Void)? = nil) {
-        guard let uid = requireUID() else {
-            completion?("No authenticated user")
+    func deleteExpense(_ expense: ExpenseRecord, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = currentUID() else {
+            completion?(false)
             return
         }
 
-        document("expenses", uid: uid, id: expense.id).delete { error in
-            DispatchQueue.main.async {
-                if let error {
-                    print("❌ Delete expense failed:", error.localizedDescription)
-                    completion?(error.localizedDescription)
-                } else {
-                    print("✅ Expense deleted")
-                    completion?(nil)
-                }
+        doc("expenses", uid, expense.id).delete { error in
+            if let error {
+                print("FIREBASE DELETE ERROR EXPENSE:", error.localizedDescription)
             }
+            DispatchQueue.main.async { completion?(error == nil) }
         }
     }
 
     // MARK: - Goals
 
-    func addGoalRecord(_ goal: GoalRecord, completion: ((String?) -> Void)? = nil) {
-        guard let uid = requireUID() else {
-            completion?("No authenticated user")
+    func addGoalRecord(_ goal: GoalRecord, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = currentUID() else {
+            completion?(false)
             return
         }
 
-        document("goals", uid: uid, id: goal.id).setData([
+        doc("goals", uid, goal.id).setData([
             "goalName": goal.goalName,
             "goalDescription": goal.goalDescription,
             "targetDate": Timestamp(date: goal.targetDate)
         ]) { error in
-            DispatchQueue.main.async {
-                if let error {
-                    print("❌ Add goal failed:", error.localizedDescription)
-                    completion?(error.localizedDescription)
-                } else {
-                    print("✅ Goal saved")
-                    completion?(nil)
-                }
+            if let error {
+                print("FIREBASE SAVE ERROR GOAL:", error.localizedDescription)
+            } else {
+                print("GOAL SAVED FIREBASE:", goal.id.uuidString.uppercased())
             }
+            DispatchQueue.main.async { completion?(error == nil) }
         }
     }
 
-    func updateGoalRecord(_ goal: GoalRecord, completion: ((String?) -> Void)? = nil) {
+    func updateGoalRecord(_ goal: GoalRecord, completion: ((Bool) -> Void)? = nil) {
         addGoalRecord(goal, completion: completion)
     }
 
-    func deleteGoalRecord(_ goal: GoalRecord, completion: ((String?) -> Void)? = nil) {
-        guard let uid = requireUID() else {
-            completion?("No authenticated user")
+    func deleteGoalRecord(_ goal: GoalRecord, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = currentUID() else {
+            completion?(false)
             return
         }
 
-        document("goals", uid: uid, id: goal.id).delete { error in
-            DispatchQueue.main.async {
-                if let error {
-                    print("❌ Delete goal failed:", error.localizedDescription)
-                    completion?(error.localizedDescription)
-                } else {
-                    print("✅ Goal deleted")
-                    completion?(nil)
-                }
+        doc("goals", uid, goal.id).delete { error in
+            if let error {
+                print("FIREBASE DELETE ERROR GOAL:", error.localizedDescription)
             }
+            DispatchQueue.main.async { completion?(error == nil) }
         }
     }
 
     // MARK: - Habits
 
-    func addHabit(title: String, completion: ((String?) -> Void)? = nil) {
-        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    func addHabit(title: String, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = currentUID() else {
+            completion?(false)
+            return
+        }
 
-        guard !cleanTitle.isEmpty, let uid = requireUID() else {
-            completion?("Missing habit title or user")
+        let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else {
+            completion?(false)
             return
         }
 
         let habit = HabitItem(
-            title: cleanTitle,
+            title: clean,
             streak: 0,
             lastCompleted: nil,
             createdAt: Date(),
             isCompletedToday: false
         )
 
-        setHabit(habit, uid: uid, completion: completion)
+        updateHabit(habit, completion: completion)
     }
 
-    func updateHabit(_ habit: HabitItem, completion: ((String?) -> Void)? = nil) {
-        guard let uid = requireUID() else {
-            completion?("No authenticated user")
+    func updateHabit(_ habit: HabitItem, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = currentUID() else {
+            completion?(false)
             return
         }
 
-        setHabit(habit, uid: uid, completion: completion)
-    }
-
-    private func setHabit(_ habit: HabitItem, uid: String, completion: ((String?) -> Void)?) {
-        var payload: [String: Any] = [
+        var data: [String: Any] = [
             "title": habit.title,
             "streak": habit.streak,
             "createdAt": Timestamp(date: habit.createdAt),
@@ -809,46 +687,34 @@ final class AppStore: ObservableObject {
         ]
 
         if let lastCompleted = habit.lastCompleted {
-            payload["lastCompleted"] = Timestamp(date: lastCompleted)
-        } else {
-            payload["lastCompleted"] = FieldValue.delete()
+            data["lastCompleted"] = Timestamp(date: lastCompleted)
         }
 
-        document("habits", uid: uid, id: habit.id).setData(payload, merge: true) { error in
-            DispatchQueue.main.async {
-                if let error {
-                    print("❌ Habit save failed:", error.localizedDescription)
-                    completion?(error.localizedDescription)
-                } else {
-                    print("✅ Habit saved")
-                    completion?(nil)
-                }
+        doc("habits", uid, habit.id).setData(data, merge: true) { error in
+            if let error {
+                print("FIREBASE SAVE ERROR HABIT:", error.localizedDescription)
+            } else {
+                print("HABIT SAVED FIREBASE:", habit.id.uuidString.uppercased())
             }
+            DispatchQueue.main.async { completion?(error == nil) }
         }
     }
 
-    func deleteHabit(_ habit: HabitItem, completion: ((String?) -> Void)? = nil) {
-        guard let uid = requireUID() else {
-            completion?("No authenticated user")
+    func deleteHabit(_ habit: HabitItem, completion: ((Bool) -> Void)? = nil) {
+        guard let uid = currentUID() else {
+            completion?(false)
             return
         }
 
-        document("habits", uid: uid, id: habit.id).delete { error in
-            DispatchQueue.main.async {
-                if let error {
-                    print("❌ Delete habit failed:", error.localizedDescription)
-                    completion?(error.localizedDescription)
-                } else {
-                    print("✅ Habit deleted")
-                    completion?(nil)
-                }
+        doc("habits", uid, habit.id).delete { error in
+            if let error {
+                print("FIREBASE DELETE ERROR HABIT:", error.localizedDescription)
             }
+            DispatchQueue.main.async { completion?(error == nil) }
         }
     }
 
     func saveAll() {
-        for habit in habits {
-            updateHabit(habit)
-        }
+        habits.forEach { updateHabit($0) }
     }
 }

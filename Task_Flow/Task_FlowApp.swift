@@ -3,26 +3,22 @@ import FirebaseCore
 
 @main
 struct Task_FlowApp: App {
-    @StateObject private var auth: AuthStore
-    @StateObject private var store: AppStore
+    @StateObject private var authStore: AuthStore
+    @StateObject private var appStore: AppStore
 
     init() {
-        if FirebaseApp.app() == nil {
-            FirebaseApp.configure()
-        }
+        FirebaseApp.configure()
 
-        let authStore = AuthStore()
-        let appStore = AppStore(auth: authStore)
-
-        _auth = StateObject(wrappedValue: authStore)
-        _store = StateObject(wrappedValue: appStore)
+        let auth = AuthStore()
+        _authStore = StateObject(wrappedValue: auth)
+        _appStore = StateObject(wrappedValue: AppStore(auth: auth))
     }
 
     var body: some Scene {
         WindowGroup {
             RootView()
-                .environmentObject(auth)
-                .environmentObject(store)
+                .environmentObject(authStore)
+                .environmentObject(appStore)
         }
     }
 }

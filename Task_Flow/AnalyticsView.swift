@@ -1,8 +1,3 @@
-//
-//  AnalyticsView.swift
-//  Task_Flow
-//
-
 import SwiftUI
 
 // This view shows analytics data

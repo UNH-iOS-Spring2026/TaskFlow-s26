@@ -9,14 +9,12 @@ struct WorkHoursView: View {
     @State private var selectedYear: Int = Calendar.current.component(.year, from: Date())
     @State private var searchText: String = ""
 
-    // Work session form
     @State private var wsDate: Date = Date()
     @State private var wsStart: Date = Date()
     @State private var wsEnd: Date = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date()
     @State private var wsRate: String = ""
     @State private var wsNotes: String = ""
 
-    // Expense form
     @State private var exDate: Date = Date()
     @State private var exName: String = ""
     @State private var exType: ExpenseType = .food
@@ -95,7 +93,7 @@ struct WorkHoursView: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
+        .background(Color.white.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
@@ -103,26 +101,9 @@ struct WorkHoursView: View {
         let stats = currentStats
 
         return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3), spacing: 14) {
-            statCard(
-                title: "Total Hours",
-                value: hoursText(stats.totalHours),
-                subtitle: "vs \(previousLabel)",
-                accent: .purple
-            )
-
-            statCard(
-                title: "Total Earnings",
-                value: money(stats.totalEarnings),
-                subtitle: "vs \(previousLabel)",
-                accent: .orange
-            )
-
-            statCard(
-                title: "Sessions",
-                value: String(stats.totalSessions),
-                subtitle: "in \(currentLabel)",
-                accent: .purple
-            )
+            statCard(title: "Total Hours", value: hoursText(stats.totalHours), subtitle: "vs \(previousLabel)", accent: .purple)
+            statCard(title: "Total Earnings", value: money(stats.totalEarnings), subtitle: "vs \(previousLabel)", accent: .orange)
+            statCard(title: "Sessions", value: String(stats.totalSessions), subtitle: "in \(currentLabel)", accent: .purple)
         }
     }
 
@@ -130,33 +111,10 @@ struct WorkHoursView: View {
         let stats = currentStats
 
         return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 2), spacing: 14) {
-            pastelCard(
-                title: "Avg Daily Hours",
-                value: hoursText(stats.avgDailyHours),
-                subtitle: "per day worked",
-                tint: Color(red: 0.91, green: 0.95, blue: 1.0)
-            )
-
-            pastelCard(
-                title: "Earnings/Hour",
-                value: money(stats.earningsPerHour),
-                subtitle: "average rate",
-                tint: Color(red: 0.91, green: 0.98, blue: 0.92)
-            )
-
-            pastelCard(
-                title: "Days Worked",
-                value: String(stats.daysWorked),
-                subtitle: "in this period",
-                tint: Color(red: 0.96, green: 0.92, blue: 1.0)
-            )
-
-            pastelCard(
-                title: "Busiest Day",
-                value: stats.busiestDay,
-                subtitle: stats.busiestDay == "—" ? "no data" : "\(shortHours(stats.busiestDayHours)) worked",
-                tint: Color(red: 0.97, green: 0.94, blue: 0.85)
-            )
+            pastelCard(title: "Avg Daily Hours", value: hoursText(stats.avgDailyHours), subtitle: "per day worked", tint: Color(red: 0.91, green: 0.95, blue: 1.0))
+            pastelCard(title: "Earnings/Hour", value: money(stats.earningsPerHour), subtitle: "average rate", tint: Color(red: 0.91, green: 0.98, blue: 0.92))
+            pastelCard(title: "Days Worked", value: String(stats.daysWorked), subtitle: "in this period", tint: Color(red: 0.96, green: 0.92, blue: 1.0))
+            pastelCard(title: "Busiest Day", value: stats.busiestDay, subtitle: stats.busiestDay == "—" ? "no data" : "\(shortHours(stats.busiestDayHours)) worked", tint: Color(red: 0.97, green: 0.94, blue: 0.85))
         }
     }
 
@@ -525,10 +483,6 @@ struct WorkHoursView: View {
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
-    private var cardBackground: some View {
-        Color.white.opacity(0.08)
-    }
-
     private var background: some View {
         LinearGradient(
             colors: [
@@ -553,7 +507,8 @@ struct WorkHoursView: View {
     private var availableYears: [Int] {
         let sessionYears = sessions.map { Calendar.current.component(.year, from: $0.date) }
         let expenseYears = expenses.map { Calendar.current.component(.year, from: $0.date) }
-        let set = Set(sessionYears + expenseYears + [Calendar.current.component(.year, from: Date())])
+        let currentYear = Calendar.current.component(.year, from: Date())
+        let set = Set(sessionYears + expenseYears + [currentYear])
         return set.sorted(by: >)
     }
 
@@ -593,7 +548,10 @@ struct WorkHoursView: View {
     }
 
     private var wsHours: Double {
-        diffHours(start: wsStart, end: wsEnd)
+        let start = mergedDate(date: wsDate, time: wsStart)
+        let rawEnd = mergedDate(date: wsDate, time: wsEnd)
+        let end = adjustedEndDate(start: start, end: rawEnd)
+        return max(0, end.timeIntervalSince(start) / 3600)
     }
 
     private var wsEarnings: Double {
@@ -614,12 +572,13 @@ struct WorkHoursView: View {
     }
 
     private func addWorkSession() {
-        guard wsHours > 0 else { return }
-
         let rate = Double(wsRate) ?? 0
         let start = mergedDate(date: wsDate, time: wsStart)
         let rawEnd = mergedDate(date: wsDate, time: wsEnd)
         let end = adjustedEndDate(start: start, end: rawEnd)
+
+        let hours = max(0, end.timeIntervalSince(start) / 3600)
+        guard hours > 0 else { return }
 
         let entry = WorkSessionRecord(
             date: wsDate,
@@ -657,19 +616,6 @@ struct WorkHoursView: View {
         exWhere = ""
         exAmount = ""
         exType = .food
-    }
-
-    private func diffHours(start: Date, end: Date) -> Double {
-        let startMinutes = Calendar.current.component(.hour, from: start) * 60
-            + Calendar.current.component(.minute, from: start)
-        let endMinutes = Calendar.current.component(.hour, from: end) * 60
-            + Calendar.current.component(.minute, from: end)
-
-        let minutes = endMinutes >= startMinutes
-            ? endMinutes - startMinutes
-            : endMinutes + (24 * 60) - startMinutes
-
-        return Double(minutes) / 60.0
     }
 
     private func isInSelectedPeriod(_ date: Date) -> Bool {
@@ -710,6 +656,7 @@ struct WorkHoursView: View {
         let earningsPerHour = totalHours == 0 ? 0 : totalEarnings / totalHours
 
         var weekdayHours: [String: Double] = [:]
+
         for item in source {
             let dayName = weekdayName(item.date)
             weekdayHours[dayName, default: 0] += item.hours
