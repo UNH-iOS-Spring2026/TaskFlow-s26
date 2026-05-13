@@ -1,10 +1,6 @@
 //
 //  AuthStore.swift
 //  Task_Flow
-//
-//  Created by Aravind Ganipisetty
-//
-
 import Foundation
 import Combine
 import FirebaseAuth

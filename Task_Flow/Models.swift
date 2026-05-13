@@ -1,10 +1,6 @@
 //
 //  Models.swift
 //  Task_Flow
-//
-//  Created by Aravind Ganipisetty
-//
-
 import Foundation
 
 // MARK: - Task Model

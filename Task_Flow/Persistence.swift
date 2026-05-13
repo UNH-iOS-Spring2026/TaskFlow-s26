@@ -1,10 +1,6 @@
 //
 //  Persistence.swift
 //  Task_Flow
-//
-//  Created by Aravind Ganipisetty
-//
-
 import Foundation
 
 // Handles simple local file storage for Codable data.

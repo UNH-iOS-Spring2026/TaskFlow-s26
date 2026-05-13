@@ -1,9 +1,6 @@
 //
 //  OnboardingView.swift
 //  Task_Flow
-//
-//  Created by Aravind Ganipisetty on 5/12/26.
-//
 
 import SwiftUI
 

@@ -1,9 +1,7 @@
 //
 //  Task_FlowApp.swift
 //  Task_Flow
-//
-//  Created by Aravind Ganipisetty
-//
+
 
 import SwiftUI
 import FirebaseCore
