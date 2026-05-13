@@ -12,6 +12,7 @@ import FirebaseCore
 import LocalAuthentication
 import Security
 
+// This class manages authentication (login, signup, logout)
 final class AuthStore: ObservableObject {
 
     // MARK: - Published Authentication State
@@ -191,6 +192,7 @@ final class AuthStore: ObservableObject {
     // Signs the user out of Firebase.
     func logout(completion: ((Bool, String?) -> Void)? = nil) {
         do {
+            // Sign out from Firebase
             try Auth.auth().signOut()
 
             isLoggedIn = false

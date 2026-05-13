@@ -11,6 +11,8 @@ import SwiftUI
 //  reminders, work sessions, expenses, goals, and habits.
 
 struct AnalyticsView: View {
+    
+    // Getting shared data from AppStore
     @EnvironmentObject var store: AppStore
     @AppStorage("tf_dark_mode") private var darkMode = false
 
@@ -70,6 +72,7 @@ struct AnalyticsView: View {
                 .scrollContentBackground(.hidden)
                 .listStyle(.insetGrouped)
             }
+            // Title at top
             .navigationTitle("Analytics")
             .toolbarBackground(darkMode ? Color.black : Color.white, for: .navigationBar)
             .toolbarColorScheme(darkMode ? .dark : .light, for: .navigationBar)
