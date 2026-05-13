@@ -1,34 +1,44 @@
+//
+//  AuthView.swift
+//  Task_Flow
+//
+//  Created by Aravind Ganipisetty
+//
+
 import SwiftUI
+import LocalAuthentication
 
 struct AuthView: View {
     @EnvironmentObject var auth: AuthStore
 
+    // Stores whether biometric login is enabled from Settings.
+    @AppStorage("tf_biometric_enabled") private var biometricEnabled = false
+
+    // MARK: - Form State
+
+    // Controls whether the screen is in Login mode or Sign Up mode.
     @State private var isLoginMode = true
 
+    // User input fields for authentication.
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
 
+    // Used for the forgot password sheet.
     @State private var forgotEmail = ""
     @State private var showForgotPasswordSheet = false
 
+    // Messages shown to the user after login, sign up, reset, or biometric action.
     @State private var errorMessage = ""
     @State private var infoMessage = ""
+
+    // Prevents repeated button taps while Firebase is processing.
     @State private var isLoading = false
 
     var body: some View {
         NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Color.black,
-                        Color(red: 8/255, green: 12/255, blue: 42/255),
-                        Color.black
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                background
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 22) {
@@ -46,6 +56,25 @@ struct AuthView: View {
         }
     }
 
+    // MARK: - Background
+
+    // Main authentication screen background.
+    private var background: some View {
+        LinearGradient(
+            colors: [
+                Color.black,
+                Color(red: 8/255, green: 12/255, blue: 42/255),
+                Color.black
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
+    }
+
+    // MARK: - Header
+
+    // Displays the app icon, app name, and short description.
     private var header: some View {
         VStack(spacing: 12) {
             Image(systemName: "checklist.checked")
@@ -70,6 +99,9 @@ struct AuthView: View {
         .padding(.top, 20)
     }
 
+    // MARK: - Login and Sign Up Switcher
+
+    // Allows the user to switch between Login and Sign Up forms.
     private var modeSwitcher: some View {
         HStack(spacing: 0) {
             Button {
@@ -100,6 +132,9 @@ struct AuthView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
+    // MARK: - Authentication Form
+
+    // Main card containing email, password, login, sign up, biometric, and forgot password actions.
     private var formCard: some View {
         VStack(spacing: 16) {
             VStack(spacing: 14) {
@@ -148,6 +183,7 @@ struct AuthView: View {
                     if isLoading {
                         ProgressView()
                     }
+
                     Text(isLoginMode ? "Login" : "Create Account")
                         .font(.headline.bold())
                 }
@@ -164,6 +200,27 @@ struct AuthView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .disabled(isLoading)
+
+            // Shows biometric login only on the login screen after the user enables it in Settings.
+            if isLoginMode && biometricEnabled {
+                Button {
+                    loginWithBiometrics()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: biometricIconName)
+                            .font(.headline)
+
+                        Text("Login with \(biometricTitle)")
+                            .font(.headline.weight(.semibold))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+                    .background(Color.white.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .disabled(isLoading)
+            }
 
             if isLoginMode {
                 Button {
@@ -183,6 +240,9 @@ struct AuthView: View {
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
+    // MARK: - Input Field
+
+    // Reusable input field for email, password, and confirm password.
     private func inputField(
         title: String,
         text: Binding<String>,
@@ -202,7 +262,7 @@ struct AuthView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.emailAddress)
-                    }
+                }
             }
             .foregroundColor(.white)
             .padding(.horizontal, 14)
@@ -212,19 +272,13 @@ struct AuthView: View {
         }
     }
 
+    // MARK: - Forgot Password Sheet
+
+    // Sheet used to send Firebase password reset email.
     private var forgotPasswordView: some View {
         NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [
-                        Color.black,
-                        Color(red: 8/255, green: 12/255, blue: 42/255),
-                        Color.black
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                background
 
                 VStack(spacing: 18) {
                     Text("Reset Password")
@@ -253,6 +307,7 @@ struct AuthView: View {
                             if isLoading {
                                 ProgressView()
                             }
+
                             Text("Send Reset Link")
                                 .font(.headline.bold())
                         }
@@ -298,6 +353,9 @@ struct AuthView: View {
         }
     }
 
+    // MARK: - Submit Logic
+
+    // Handles both Login and Sign Up depending on the selected mode.
     private func submit() {
         clearMessages()
         isLoading = true
@@ -308,6 +366,7 @@ struct AuthView: View {
         if isLoginMode {
             auth.login(email: cleanEmail, password: cleanPassword) { success, message in
                 isLoading = false
+
                 if success {
                     infoMessage = "Login successful."
                 } else {
@@ -325,6 +384,7 @@ struct AuthView: View {
 
             auth.createAccount(email: cleanEmail, password: cleanPassword) { success, message in
                 isLoading = false
+
                 if success {
                     infoMessage = "Account created successfully."
                 } else {
@@ -334,6 +394,27 @@ struct AuthView: View {
         }
     }
 
+    // MARK: - Biometric Login
+
+    // Starts Face ID or Touch ID login using AuthStore.
+    private func loginWithBiometrics() {
+        clearMessages()
+        isLoading = true
+
+        auth.loginWithBiometrics { success, message in
+            isLoading = false
+
+            if success {
+                infoMessage = "Biometric login successful."
+            } else {
+                errorMessage = message ?? "Biometric login failed."
+            }
+        }
+    }
+
+    // MARK: - Password Reset
+
+    // Sends a password reset link to the entered email address.
     private func sendReset() {
         clearMessages()
         isLoading = true
@@ -342,16 +423,54 @@ struct AuthView: View {
 
         auth.resetPassword(email: cleanEmail) { success, message in
             isLoading = false
+
             if success {
-                infoMessage = "Password reset email sent."
+                infoMessage = message ?? "Password reset email sent. Check your inbox or spam folder."
             } else {
                 errorMessage = message ?? "Could not send reset email."
             }
         }
     }
 
+    // MARK: - Message Helpers
+
+    // Clears old error and success messages before a new action starts.
     private func clearMessages() {
         errorMessage = ""
         infoMessage = ""
+    }
+
+    // MARK: - Biometric Display Helpers
+
+    // Returns the correct biometric title based on the current device.
+    private var biometricTitle: String {
+        let context = LAContext()
+        var error: NSError?
+        context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+
+        switch context.biometryType {
+        case .faceID:
+            return "Face ID"
+        case .touchID:
+            return "Touch ID"
+        default:
+            return "Biometrics"
+        }
+    }
+
+    // Returns the matching SF Symbol for Face ID, Touch ID, or fallback lock icon.
+    private var biometricIconName: String {
+        let context = LAContext()
+        var error: NSError?
+        context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+
+        switch context.biometryType {
+        case .faceID:
+            return "faceid"
+        case .touchID:
+            return "touchid"
+        default:
+            return "lock.fill"
+        }
     }
 }

@@ -1,15 +1,36 @@
+//
+//  GoalsView.swift
+//  Task_Flow
+//
+//  Created by Aravind Ganipisetty
+//
+
 import SwiftUI
 
 struct GoalsView: View {
     @EnvironmentObject var store: AppStore
     @AppStorage("tf_dark_mode") private var darkMode = false
 
+    // MARK: - Goal Form State
+
+    // Stores the goal name entered by the user.
     @State private var goalName: String = ""
+
+    // Stores the optional goal description entered by the user.
     @State private var goalDescription: String = ""
+
+    // Stores the selected target date and time for the goal.
     @State private var targetDate: Date = Date()
 
+    // MARK: - View State
+
+    // Shows an alert when the user tries to save without a goal name.
     @State private var showValidationAlert = false
+
+    // Stores the goal selected for preview, editing, or deleting.
     @State private var selectedGoal: GoalRecord?
+
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
@@ -22,8 +43,10 @@ struct GoalsView: View {
 
                     if store.goalRecords.isEmpty {
                         Spacer()
+
                         Text("No goals saved yet")
                             .foregroundColor(secondaryTextColor)
+
                         Spacer()
                     } else {
                         ScrollView {
@@ -59,6 +82,9 @@ struct GoalsView: View {
         }
     }
 
+    // MARK: - Background
+
+    // Main background used for both light and dark mode.
     private var backgroundView: some View {
         Group {
             if darkMode {
@@ -85,6 +111,9 @@ struct GoalsView: View {
         }
     }
 
+    // MARK: - Create Goal Section
+
+    // Form section used to create and save a new goal.
     private var createGoalSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Create Goal")
@@ -162,6 +191,9 @@ struct GoalsView: View {
         .padding(.horizontal)
     }
 
+    // MARK: - Goal Card
+
+    // Displays one saved goal with target date and delete action.
     private func goalCard(_ goal: GoalRecord) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
@@ -210,30 +242,41 @@ struct GoalsView: View {
         }
     }
 
+    // MARK: - Theme Colors
+
+    // Main text color used for titles and important content.
     private var primaryTextColor: Color {
         darkMode ? .white : .black
     }
 
+    // Secondary text color used for descriptions and empty states.
     private var secondaryTextColor: Color {
         darkMode ? Color.white.opacity(0.7) : Color.black.opacity(0.6)
     }
 
+    // Card background color used for goal form and saved goal cards.
     private var cardBackground: Color {
         darkMode ? Color.white.opacity(0.08) : Color.white.opacity(0.9)
     }
 
+    // Border color used around cards.
     private var cardBorder: Color {
         darkMode ? Color.white.opacity(0.08) : Color.black.opacity(0.06)
     }
 
+    // Background color used for text fields.
     private var fieldBackgroundColor: Color {
         darkMode ? Color.white.opacity(0.08) : Color.black.opacity(0.04)
     }
 
+    // Background color for the secondary Cancel button.
     private var buttonSecondaryBackground: Color {
         darkMode ? Color.white.opacity(0.12) : Color.black.opacity(0.06)
     }
 
+    // MARK: - Goal Actions
+
+    // Validates the form and saves a new goal to AppStore.
     private func saveGoal() {
         let trimmedName = goalName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDescription = goalDescription.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -253,23 +296,32 @@ struct GoalsView: View {
         clearForm()
     }
 
+    // Clears the goal form after saving or cancelling.
     private func clearForm() {
         goalName = ""
         goalDescription = ""
         targetDate = Date()
     }
 
+    // MARK: - Date Formatting
+
+    // Formats the target date shown on each goal card.
     private func formattedDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
+
         return formatter.string(from: date)
     }
 }
 
+// MARK: - Goal Detail Sheet
+
+// Sheet used to preview, edit, save, or delete an existing goal.
 struct GoalDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
 
+    // Editable copy of the selected goal.
     @State private var editableGoal: GoalRecord
 
     let darkMode: Bool
@@ -307,7 +359,10 @@ struct GoalDetailSheet: View {
                 Section {
                     Button("Save Changes") {
                         let cleanedName = editableGoal.goalName.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !cleanedName.isEmpty else { return }
+
+                        guard !cleanedName.isEmpty else {
+                            return
+                        }
 
                         editableGoal.goalName = cleanedName
                         editableGoal.goalDescription = editableGoal.goalDescription.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -337,6 +392,9 @@ struct GoalDetailSheet: View {
     }
 }
 
+// MARK: - Preview
+
+// Preview creates local store objects so the Goals screen can render in Xcode canvas.
 #Preview {
     let auth = AuthStore()
     let store = AppStore(auth: auth)

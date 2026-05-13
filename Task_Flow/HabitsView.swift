@@ -2,6 +2,8 @@
 //  HabitsView.swift
 //  Task_Flow
 //
+//  Created by Aravind Ganipisetty
+//
 
 import SwiftUI
 
@@ -9,9 +11,18 @@ struct HabitsView: View {
     @EnvironmentObject var store: AppStore
     @AppStorage("tf_dark_mode") private var darkMode = false
 
+    // MARK: - View State
+
+    // Controls the Add Habit sheet.
     @State private var showAddHabitSheet = false
+
+    // Stores the habit selected for deletion.
     @State private var habitToDelete: HabitItem?
+
+    // Controls the delete confirmation alert.
     @State private var showDeleteAlert = false
+
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
@@ -76,10 +87,16 @@ struct HabitsView: View {
         }
     }
 
+    // MARK: - Habit Data
+
+    // Sorts habits so the newest habit appears first.
     private var sortedHabits: [HabitItem] {
         store.habits.sorted { $0.createdAt > $1.createdAt }
     }
 
+    // MARK: - Empty State
+
+    // Shows a friendly message when the user has not created any habits yet.
     private var emptyState: some View {
         VStack(spacing: 16) {
             Spacer()
@@ -103,6 +120,9 @@ struct HabitsView: View {
         .padding()
     }
 
+    // MARK: - Habit Card
+
+    // Displays one habit with streak progress, completion action, and delete option.
     private func habitCard(_ habit: HabitItem) -> some View {
         HStack(spacing: 14) {
             Button {
@@ -190,6 +210,9 @@ struct HabitsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
+    // MARK: - Habit Completion Logic
+
+    // Toggles a habit between completed today and not completed today.
     private func toggleHabitCompletion(_ habit: HabitItem) {
         var updatedHabit = habit
 
@@ -202,6 +225,7 @@ struct HabitsView: View {
         store.updateHabit(updatedHabit)
     }
 
+    // Marks a habit as completed and updates the streak based on the last completed date.
     private func markHabitDone(_ habit: inout HabitItem) {
         let now = Date()
         let calendar = Calendar.current
@@ -229,8 +253,11 @@ struct HabitsView: View {
         habit.isCompletedToday = true
     }
 
+    // Reverts today's completion and safely adjusts the streak count.
     private func undoHabitForToday(_ habit: inout HabitItem) {
-        guard habit.isCompletedToday else { return }
+        guard habit.isCompletedToday else {
+            return
+        }
 
         if habit.streak > 0 {
             habit.streak -= 1
@@ -245,6 +272,7 @@ struct HabitsView: View {
         habit.isCompletedToday = false
     }
 
+    // Updates the completed-today flag when the screen opens on a new day.
     private func normalizeCompletedTodayFlags() {
         let calendar = Calendar.current
 
@@ -265,30 +293,41 @@ struct HabitsView: View {
         }
     }
 
+    // MARK: - Formatting
+
+    // Formats the last completed date shown on each habit card.
     private func formattedDate(_ date: Date) -> String {
         date.formatted(date: .abbreviated, time: .omitted)
     }
 
+    // MARK: - Theme Colors
+
+    // Main text color based on the selected theme.
     private var primaryTextColor: Color {
         darkMode ? .white : .black
     }
 
+    // Secondary text color used for streak text and helper text.
     private var secondaryTextColor: Color {
         darkMode ? .white.opacity(0.72) : .black.opacity(0.65)
     }
 
+    // Card background color for each habit row.
     private var cardBackground: Color {
         darkMode ? Color.white.opacity(0.08) : Color.black.opacity(0.04)
     }
 
+    // Border color around habit cards.
     private var cardBorder: Color {
         darkMode ? Color.white.opacity(0.10) : Color.black.opacity(0.08)
     }
 
+    // Orange tile color used for the habit completion button.
     private var accentTileColor: Color {
         darkMode ? Color.orange.opacity(0.9) : Color.orange
     }
 
+    // Main screen background for light and dark mode.
     private var backgroundView: some View {
         Group {
             if darkMode {
@@ -314,11 +353,15 @@ struct HabitsView: View {
     }
 }
 
+// MARK: - Add Habit Sheet
+
+// Sheet used to create a new habit.
 struct AddHabitSheet: View {
     @EnvironmentObject var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @AppStorage("tf_dark_mode") private var darkMode = false
 
+    // Stores the habit title entered by the user.
     @State private var title = ""
 
     var body: some View {
@@ -362,26 +405,38 @@ struct AddHabitSheet: View {
         }
     }
 
+    // MARK: - Save Logic
+
+    // Checks whether the habit title is valid before enabling Save.
     private var canSave: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    // Saves the new habit through AppStore and closes the sheet.
     private func saveHabit() {
         let cleanedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanedTitle.isEmpty else { return }
+
+        guard !cleanedTitle.isEmpty else {
+            return
+        }
 
         store.addHabit(title: cleanedTitle)
         dismiss()
     }
 
+    // MARK: - Theme Colors
+
+    // Main text color based on the selected theme.
     private var primaryTextColor: Color {
         darkMode ? .white : .black
     }
 
+    // Text field background color.
     private var fieldBackgroundColor: Color {
         darkMode ? Color.white.opacity(0.08) : Color.black.opacity(0.05)
     }
 
+    // Background used for the Add Habit sheet.
     private var backgroundView: some View {
         Group {
             if darkMode {
@@ -407,6 +462,9 @@ struct AddHabitSheet: View {
     }
 }
 
+// MARK: - Preview
+
+// Preview creates local store objects so the Habits screen can render in Xcode canvas.
 #Preview {
     let auth = AuthStore()
     let store = AppStore(auth: auth)

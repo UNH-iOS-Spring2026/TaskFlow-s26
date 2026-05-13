@@ -1,23 +1,47 @@
+//
+//  NotesView.swift
+//  Task_Flow
+//
+//  Created by Aravind Ganipisetty
+//
+
 import SwiftUI
 
 struct NotesView: View {
     @EnvironmentObject var store: AppStore
     @AppStorage("tf_dark_mode") private var darkMode = false
 
+    // MARK: - Note Form State
+
+    // Stores the title entered for a new note.
     @State private var title: String = ""
+
+    // Stores the body text entered for a new note.
     @State private var bodyText: String = ""
+
+    // Stores the text used to search saved notes.
     @State private var searchText: String = ""
+
+    // Stores the selected note when the user opens the edit sheet.
     @State private var editingNote: NoteItem?
 
+    // MARK: - Filtered Notes
+
+    // Filters notes by title or body using the search text.
     var filteredNotes: [NoteItem] {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !q.isEmpty else { return store.notes }
+
+        guard !q.isEmpty else {
+            return store.notes
+        }
 
         return store.notes.filter {
             $0.title.lowercased().contains(q) ||
             $0.body.lowercased().contains(q)
         }
     }
+
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
@@ -31,8 +55,10 @@ struct NotesView: View {
 
                     if filteredNotes.isEmpty {
                         Spacer()
+
                         Text("No notes found")
                             .foregroundColor(secondaryText)
+
                         Spacer()
                     } else {
                         ScrollView {
@@ -61,6 +87,9 @@ struct NotesView: View {
         }
     }
 
+    // MARK: - Create Note Card
+
+    // Form used to create and save a new note.
     private var inputCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Create Note")
@@ -102,6 +131,9 @@ struct NotesView: View {
         .padding(.horizontal)
     }
 
+    // MARK: - Search Bar
+
+    // Search field used to filter saved notes.
     private var searchBar: some View {
         TextField("Search notes...", text: $searchText)
             .padding(12)
@@ -111,6 +143,9 @@ struct NotesView: View {
             .padding(.horizontal)
     }
 
+    // MARK: - Note Card
+
+    // Displays one saved note with title, body preview, date, and delete action.
     private func noteCard(_ note: NoteItem) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -149,11 +184,16 @@ struct NotesView: View {
         }
     }
 
+    // MARK: - Add Note
+
+    // Validates the input and saves a new note through AppStore.
     private func addNote() {
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanBody = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard !cleanTitle.isEmpty || !cleanBody.isEmpty else { return }
+        guard !cleanTitle.isEmpty || !cleanBody.isEmpty else {
+            return
+        }
 
         store.addNote(
             title: cleanTitle.isEmpty ? "Untitled" : cleanTitle,
@@ -164,6 +204,9 @@ struct NotesView: View {
         bodyText = ""
     }
 
+    // MARK: - Note Accent Color
+
+    // Gives each note a soft background color using its saved color seed.
     private func noteAccent(_ seed: Int) -> Color {
         let colors: [Color] = [
             Color.purple.opacity(0.16),
@@ -177,40 +220,58 @@ struct NotesView: View {
         return colors[abs(seed) % colors.count]
     }
 
+    // MARK: - Theme
+
+    // Main background for light and dark mode.
     private var background: some View {
         LinearGradient(
             colors: darkMode
-            ? [Color.black, Color(red: 0.04, green: 0.05, blue: 0.14)]
-            : [Color(red: 0.96, green: 0.97, blue: 1.0), Color.white],
+            ? [
+                Color.black,
+                Color(red: 0.04, green: 0.05, blue: 0.14)
+            ]
+            : [
+                Color(red: 0.96, green: 0.97, blue: 1.0),
+                Color.white
+            ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
     }
 
+    // Primary text color based on the selected app theme.
     private var primaryText: Color {
         darkMode ? .white : .black
     }
 
+    // Secondary text color used for body text, dates, and empty state text.
     private var secondaryText: Color {
         darkMode ? .white.opacity(0.7) : .black.opacity(0.6)
     }
 
+    // Card background color used for the create note card and search bar.
     private var cardBackground: Color {
         darkMode ? .white.opacity(0.08) : .white.opacity(0.9)
     }
 
+    // Text field background color.
     private var fieldBackground: Color {
         darkMode ? .white.opacity(0.08) : .black.opacity(0.05)
     }
 
+    // Border color used around the create note card.
     private var cardBorder: Color {
         darkMode ? .white.opacity(0.08) : .black.opacity(0.06)
     }
 }
 
+// MARK: - Edit Note Sheet
+
+// Sheet used to edit or delete an existing note.
 struct EditNoteSheet: View {
     @Environment(\.dismiss) private var dismiss
 
+    // Editable copy of the selected note.
     @State private var note: NoteItem
 
     let onSave: (NoteItem) -> Void

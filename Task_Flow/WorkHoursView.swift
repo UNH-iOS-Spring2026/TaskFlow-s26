@@ -1,27 +1,71 @@
+//
+//  WorkHoursView.swift
+//  Task_Flow
+//
+//  Created by Aravind Ganipisetty
+//
+
 import SwiftUI
 
 struct WorkHoursView: View {
     @EnvironmentObject var store: AppStore
+    @AppStorage("tf_dark_mode") private var darkMode = false
 
+    // MARK: - Screen State
+
+    // Controls whether the screen shows work sessions or expenses.
     @State private var tab: WorkTab = .sessions
+
+    // Controls whether data is filtered by month or year.
     @State private var periodMode: PeriodMode = .monthly
+
+    // Stores the selected month index.
     @State private var selectedMonth: Int = Calendar.current.component(.month, from: Date()) - 1
+
+    // Stores the selected year.
     @State private var selectedYear: Int = Calendar.current.component(.year, from: Date())
+
+    // Stores search text used to filter sessions and expenses.
     @State private var searchText: String = ""
 
+    // MARK: - Work Session Form State
+
+    // Stores the selected work session date.
     @State private var wsDate: Date = Date()
+
+    // Stores the work session start time.
     @State private var wsStart: Date = Date()
+
+    // Stores the work session end time.
     @State private var wsEnd: Date = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date()
+
+    // Stores hourly pay as text before converting it to Double.
     @State private var wsRate: String = ""
+
+    // Stores optional work session notes.
     @State private var wsNotes: String = ""
 
+    // MARK: - Expense Form State
+
+    // Stores the selected expense date.
     @State private var exDate: Date = Date()
+
+    // Stores the expense name.
     @State private var exName: String = ""
+
+    // Stores the selected expense category.
     @State private var exType: ExpenseType = .food
+
+    // Stores where the expense was used.
     @State private var exWhere: String = ""
+
+    // Stores expense amount as text before converting it to Double.
     @State private var exAmount: String = ""
 
+    // Month names used in the month picker.
     private let monthNames = Calendar.current.monthSymbols
+
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
@@ -39,22 +83,25 @@ struct WorkHoursView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 14)
-                    .padding(.bottom, 30)
+                    .padding(.bottom, 110)
                 }
             }
             .navigationBarHidden(true)
         }
     }
 
+    // MARK: - Hero Section
+
+    // Top section with title, description, period mode, month picker, and year picker.
     private var heroSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Work Hours")
                 .font(.system(size: 34, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(primaryText)
 
             Text("Track your work sessions and earnings")
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.88))
+                .foregroundStyle(secondaryText)
 
             VStack(spacing: 12) {
                 HStack(spacing: 10) {
@@ -73,7 +120,7 @@ struct WorkHoursView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, 12)
                     .frame(height: 46)
-                    .background(Color.white)
+                    .background(fieldFill)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .opacity(periodMode == .yearly ? 0.7 : 1)
 
@@ -86,17 +133,20 @@ struct WorkHoursView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal, 12)
                     .frame(height: 46)
-                    .background(Color.white)
+                    .background(fieldFill)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
             }
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.08))
+        .background(cardFill)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
+    // MARK: - Top Stats Section
+
+    // Shows the main summary cards for total hours, earnings, and sessions.
     private var topStatsSection: some View {
         let stats = currentStats
 
@@ -107,6 +157,9 @@ struct WorkHoursView: View {
         }
     }
 
+    // MARK: - Extra Stats Section
+
+    // Shows additional insights calculated from the current work sessions.
     private var extraStatsSection: some View {
         let stats = currentStats
 
@@ -118,13 +171,16 @@ struct WorkHoursView: View {
         }
     }
 
+    // MARK: - Controls Section
+
+    // Contains search field and tab buttons for sessions and expenses.
     private var controlsSection: some View {
         VStack(spacing: 12) {
             TextField("Search sessions or expenses...", text: $searchText)
                 .padding(.horizontal, 14)
                 .frame(height: 48)
-                .background(Color.white)
-                .foregroundStyle(.black)
+                .background(fieldFill)
+                .foregroundStyle(primaryText)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
             HStack(spacing: 12) {
@@ -134,6 +190,9 @@ struct WorkHoursView: View {
         }
     }
 
+    // MARK: - Forms Section
+
+    // Contains both the work session form and expense form.
     private var formsSection: some View {
         VStack(spacing: 16) {
             workSessionForm
@@ -141,11 +200,14 @@ struct WorkHoursView: View {
         }
     }
 
+    // MARK: - Work Session Form
+
+    // Form used to add a new work session with date, time, hourly pay, and notes.
     private var workSessionForm: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Enter Work Time")
                 .font(.title3.weight(.bold))
-                .foregroundStyle(.black)
+                .foregroundStyle(primaryText)
 
             twoColumnGrid {
                 labeledDatePicker("Date", selection: $wsDate, displayed: [.date])
@@ -172,15 +234,18 @@ struct WorkHoursView: View {
             }
         }
         .padding(18)
-        .background(Color.white)
+        .background(cardFill)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
+    // MARK: - Expense Form
+
+    // Form used to add a new expense with amount, name, type, and usage details.
     private var expenseForm: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Enter Expense")
                 .font(.title3.weight(.bold))
-                .foregroundStyle(.black)
+                .foregroundStyle(primaryText)
 
             twoColumnGrid {
                 labeledDatePicker("Date", selection: $exDate, displayed: [.date])
@@ -190,7 +255,7 @@ struct WorkHoursView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Type")
                         .font(.headline)
-                        .foregroundStyle(Color.black.opacity(0.82))
+                        .foregroundStyle(primaryText)
 
                     Picker("Type", selection: $exType) {
                         ForEach(ExpenseType.allCases, id: \.self) { item in
@@ -201,10 +266,10 @@ struct WorkHoursView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)
                     .padding(.horizontal, 12)
-                    .background(Color.white)
+                    .background(fieldFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(Color.black.opacity(0.12), lineWidth: 1)
+                            .stroke(borderColor, lineWidth: 1)
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
@@ -218,20 +283,23 @@ struct WorkHoursView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
                     .background(Color.orange.opacity(0.85))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(darkMode ? .white : .black)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
         }
         .padding(18)
-        .background(Color.white)
+        .background(cardFill)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
+    // MARK: - Records Section
+
+    // Displays filtered work sessions or expenses based on the selected tab.
     private var recordsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(tab == .sessions ? "Work Sessions" : "Expenses")
                 .font(.title3.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(primaryText)
 
             if tab == .sessions {
                 if visibleSessions.isEmpty {
@@ -257,6 +325,9 @@ struct WorkHoursView: View {
         }
     }
 
+    // MARK: - Period Button
+
+    // Reusable button for switching between monthly and yearly views.
     private func periodButton(_ title: String, mode: PeriodMode) -> some View {
         Button {
             periodMode = mode
@@ -265,12 +336,15 @@ struct WorkHoursView: View {
                 .font(.headline.weight(.bold))
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)
-                .background(periodMode == mode ? Color.purple : Color.white)
-                .foregroundStyle(periodMode == mode ? .white : .black)
+                .background(periodMode == mode ? Color.purple : fieldFill)
+                .foregroundStyle(periodMode == mode ? .white : primaryText)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
     }
 
+    // MARK: - Tab Button
+
+    // Reusable button for switching between session records and expense records.
     private func tabButton(_ value: WorkTab) -> some View {
         Button {
             tab = value
@@ -279,69 +353,80 @@ struct WorkHoursView: View {
                 .font(.headline.weight(.bold))
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)
-                .background(tab == value ? Color.purple : Color.white.opacity(0.15))
-                .foregroundStyle(.white)
+                .background(tab == value ? Color.purple : buttonFill)
+                .foregroundStyle(tab == value ? .white : primaryText)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
     }
 
+    // MARK: - Stat Card
+
+    // Reusable summary card for the top statistics section.
     private func statCard(title: String, value: String, subtitle: String, accent: Color) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(Color.black.opacity(0.78))
+                .foregroundStyle(secondaryText)
 
             Text(value)
                 .font(.system(size: 30, weight: .heavy))
-                .foregroundStyle(.black)
+                .foregroundStyle(primaryText)
 
             Text(subtitle)
                 .font(.caption)
-                .foregroundStyle(Color.black.opacity(0.62))
+                .foregroundStyle(secondaryText)
         }
         .frame(maxWidth: .infinity, minHeight: 130, alignment: .leading)
         .padding(18)
-        .background(Color.white)
+        .background(cardFill)
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(accent.opacity(0.18), lineWidth: 1)
+                .stroke(accent.opacity(0.20), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
+    // MARK: - Pastel Card
+
+    // Reusable card for extra work analytics.
     private func pastelCard(title: String, value: String, subtitle: String, tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let fill = darkMode ? Color.white.opacity(0.08) : tint
+
+        return VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
                 .font(.caption.weight(.heavy))
-                .foregroundStyle(Color.black.opacity(0.78))
+                .foregroundStyle(secondaryText)
 
             Text(value)
                 .font(.system(size: 26, weight: .heavy))
-                .foregroundStyle(.black)
+                .foregroundStyle(primaryText)
 
             Text(subtitle)
                 .font(.caption)
-                .foregroundStyle(Color.black.opacity(0.62))
+                .foregroundStyle(secondaryText)
         }
         .frame(maxWidth: .infinity, minHeight: 110, alignment: .leading)
         .padding(18)
-        .background(tint)
+        .background(fill)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
+    // MARK: - Live Value Card
+
+    // Shows live calculated hours and earnings before saving a work session.
     private func liveValueCard(title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.headline)
-                .foregroundStyle(Color.black.opacity(0.72))
+                .foregroundStyle(secondaryText)
 
             Text(value)
                 .font(.system(size: 24, weight: .heavy))
-                .foregroundStyle(Color(red: 0.36, green: 0.18, blue: 0.78))
+                .foregroundStyle(Color.purple)
         }
         .frame(maxWidth: .infinity, minHeight: 90, alignment: .leading)
         .padding(14)
-        .background(Color(red: 0.95, green: 0.94, blue: 0.98))
+        .background(darkMode ? Color.white.opacity(0.08) : Color(red: 0.95, green: 0.94, blue: 0.98))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.purple.opacity(0.18), lineWidth: 1)
@@ -349,68 +434,80 @@ struct WorkHoursView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
+    // MARK: - Labeled Text Field
+
+    // Reusable labeled text field used by work session and expense forms.
     private func labeledTextField(_ label: String, text: Binding<String>, placeholder: String, keyboard: UIKeyboardType) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
                 .font(.headline)
-                .foregroundStyle(Color.black.opacity(0.82))
+                .foregroundStyle(primaryText)
 
             TextField(placeholder, text: text)
                 .keyboardType(keyboard)
-                .foregroundStyle(.black)
+                .foregroundStyle(primaryText)
                 .padding(.horizontal, 14)
                 .frame(height: 48)
-                .background(Color.white)
+                .background(fieldFill)
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.black.opacity(0.12), lineWidth: 1)
+                        .stroke(borderColor, lineWidth: 1)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
 
+    // MARK: - Labeled Date Picker
+
+    // Reusable labeled date picker used for dates and times.
     private func labeledDatePicker(_ label: String, selection: Binding<Date>, displayed: DatePickerComponents) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
                 .font(.headline)
-                .foregroundStyle(Color.black.opacity(0.82))
+                .foregroundStyle(primaryText)
 
             DatePicker("", selection: selection, displayedComponents: displayed)
                 .labelsHidden()
                 .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
                 .padding(.horizontal, 14)
-                .background(Color.white)
+                .background(fieldFill)
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.black.opacity(0.12), lineWidth: 1)
+                        .stroke(borderColor, lineWidth: 1)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
 
+    // MARK: - Two Column Grid
+
+    // Reusable two-column layout for form inputs.
     private func twoColumnGrid<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
             content()
         }
     }
 
+    // MARK: - Session Row
+
+    // Displays one saved work session with date, time, hours, pay, notes, and delete action.
     private func sessionRow(_ session: WorkSessionRecord) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(formatDate(session.date))
                     .font(.headline.weight(.bold))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(primaryText)
 
                 Spacer()
 
                 Text(money(session.earnings))
                     .font(.headline.weight(.heavy))
-                    .foregroundStyle(Color(red: 0.36, green: 0.18, blue: 0.78))
+                    .foregroundStyle(Color.purple)
             }
 
             Text("\(weekdayName(session.date)) • \(formatTime(session.startTime)) → \(formatTime(session.endTime))")
                 .font(.subheadline)
-                .foregroundStyle(Color.black.opacity(0.72))
+                .foregroundStyle(secondaryText)
 
             HStack {
                 Text("Hours: \(shortHours(session.hours))")
@@ -418,77 +515,95 @@ struct WorkHoursView: View {
                 Text("Pay: \(money(session.hourlyPay))")
             }
             .font(.subheadline)
-            .foregroundStyle(Color.black.opacity(0.78))
+            .foregroundStyle(secondaryText)
 
             if !session.notes.isEmpty {
                 Text(session.notes)
                     .font(.subheadline)
-                    .foregroundStyle(Color.black.opacity(0.64))
+                    .foregroundStyle(secondaryText)
             }
 
             Button(role: .destructive) {
                 store.deleteWorkSession(session)
             } label: {
-                Text("Delete")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.red)
+                Label("Delete", systemImage: "trash")
+                    .font(.caption.weight(.semibold))
             }
+            .buttonStyle(.plain)
         }
         .padding(16)
-        .background(Color.white)
+        .background(cardFill)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
+    // MARK: - Expense Row
+
+    // Displays one saved expense with type, date, amount, details, and delete action.
     private func expenseRow(_ expense: ExpenseRecord) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(expense.name)
                     .font(.headline.weight(.bold))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(primaryText)
 
                 Spacer()
 
                 Text(money(expense.amount))
                     .font(.headline.weight(.heavy))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(Color.orange)
             }
 
-            Text("\(formatDate(expense.date)) • \(expense.type.rawValue)")
+            Text("\(expense.type.rawValue) • \(formatDate(expense.date))")
                 .font(.subheadline)
-                .foregroundStyle(Color.black.opacity(0.72))
+                .foregroundStyle(secondaryText)
 
-            Text(expense.whereUsed.isEmpty ? "—" : expense.whereUsed)
-                .font(.subheadline)
-                .foregroundStyle(Color.black.opacity(0.64))
+            if !expense.whereUsed.isEmpty {
+                Text(expense.whereUsed)
+                    .font(.subheadline)
+                    .foregroundStyle(secondaryText)
+            }
 
             Button(role: .destructive) {
                 store.deleteExpense(expense)
             } label: {
-                Text("Delete")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.red)
+                Label("Delete", systemImage: "trash")
+                    .font(.caption.weight(.semibold))
             }
+            .buttonStyle(.plain)
         }
         .padding(16)
-        .background(Color.white)
+        .background(cardFill)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
+    // MARK: - Empty Card
+
+    // Displays a simple empty state when no records match the current filter.
     private func emptyCard(_ message: String) -> some View {
         Text(message)
-            .font(.headline)
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, minHeight: 110)
-            .background(Color.white.opacity(0.10))
+            .font(.subheadline)
+            .foregroundStyle(secondaryText)
+            .frame(maxWidth: .infinity)
+            .padding(18)
+            .background(cardFill)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
+    // MARK: - Theme
+
+    // Main screen background for light and dark mode.
     private var background: some View {
         LinearGradient(
-            colors: [
-                Color(red: 0.08, green: 0.16, blue: 0.32),
-                Color(red: 0.04, green: 0.05, blue: 0.14),
+            colors: darkMode
+            ? [
+                Color.black,
+                Color(red: 8/255, green: 12/255, blue: 42/255),
                 Color.black
+            ]
+            : [
+                Color(red: 0.96, green: 0.97, blue: 1.00),
+                Color.white,
+                Color(red: 0.91, green: 0.94, blue: 1.00)
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
@@ -496,81 +611,120 @@ struct WorkHoursView: View {
         .ignoresSafeArea()
     }
 
-    private var sessions: [WorkSessionRecord] {
-        store.workSessions
+    // Primary text color based on the selected theme.
+    private var primaryText: Color {
+        darkMode ? .white : .black
     }
 
-    private var expenses: [ExpenseRecord] {
-        store.expenses
+    // Secondary text color used for subtitles and helper text.
+    private var secondaryText: Color {
+        darkMode ? .white.opacity(0.68) : .black.opacity(0.58)
     }
 
-    private var availableYears: [Int] {
-        let sessionYears = sessions.map { Calendar.current.component(.year, from: $0.date) }
-        let expenseYears = expenses.map { Calendar.current.component(.year, from: $0.date) }
-        let currentYear = Calendar.current.component(.year, from: Date())
-        let set = Set(sessionYears + expenseYears + [currentYear])
-        return set.sorted(by: >)
+    // Main card background color.
+    private var cardFill: Color {
+        darkMode ? Color.white.opacity(0.08) : Color.white.opacity(0.92)
     }
 
-    private var filteredSessions: [WorkSessionRecord] {
-        sessions.filter { isInSelectedPeriod($0.date) }
+    // Input field background color.
+    private var fieldFill: Color {
+        darkMode ? Color.white.opacity(0.10) : Color.white
     }
 
-    private var filteredExpenses: [ExpenseRecord] {
-        expenses.filter { isInSelectedPeriod($0.date) }
+    // Button background color for inactive controls.
+    private var buttonFill: Color {
+        darkMode ? Color.white.opacity(0.12) : Color.black.opacity(0.06)
     }
 
+    // Border color for input fields.
+    private var borderColor: Color {
+        darkMode ? Color.white.opacity(0.12) : Color.black.opacity(0.12)
+    }
+
+    // MARK: - Filtered Data
+
+    // Work sessions matching the selected month or year.
+    private var currentSessions: [WorkSessionRecord] {
+        store.workSessions.filter { isInSelectedPeriod($0.date) }
+    }
+
+    // Expenses matching the selected month or year.
+    private var currentExpenses: [ExpenseRecord] {
+        store.expenses.filter { isInSelectedPeriod($0.date) }
+    }
+
+    // Work sessions filtered by search text and sorted by newest first.
     private var visibleSessions: [WorkSessionRecord] {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !q.isEmpty else { return filteredSessions }
 
-        return filteredSessions.filter { s in
-            formatDate(s.date).lowercased().contains(q) ||
-            weekdayName(s.date).lowercased().contains(q) ||
-            formatTime(s.startTime).lowercased().contains(q) ||
-            formatTime(s.endTime).lowercased().contains(q) ||
-            s.notes.lowercased().contains(q) ||
-            money(s.hourlyPay).lowercased().contains(q)
-        }
+        return currentSessions
+            .filter {
+                q.isEmpty ||
+                $0.notes.lowercased().contains(q) ||
+                formatDate($0.date).lowercased().contains(q) ||
+                weekdayName($0.date).lowercased().contains(q)
+            }
+            .sorted { $0.date > $1.date }
     }
 
+    // Expenses filtered by search text and sorted by newest first.
     private var visibleExpenses: [ExpenseRecord] {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !q.isEmpty else { return filteredExpenses }
 
-        return filteredExpenses.filter { e in
-            formatDate(e.date).lowercased().contains(q) ||
-            e.name.lowercased().contains(q) ||
-            e.type.rawValue.lowercased().contains(q) ||
-            e.whereUsed.lowercased().contains(q) ||
-            money(e.amount).lowercased().contains(q)
-        }
+        return currentExpenses
+            .filter {
+                q.isEmpty ||
+                $0.name.lowercased().contains(q) ||
+                $0.whereUsed.lowercased().contains(q) ||
+                $0.type.rawValue.lowercased().contains(q)
+            }
+            .sorted { $0.date > $1.date }
     }
 
-    private var wsHours: Double {
-        let start = mergedDate(date: wsDate, time: wsStart)
-        let rawEnd = mergedDate(date: wsDate, time: wsEnd)
-        let end = adjustedEndDate(start: start, end: rawEnd)
-        return max(0, end.timeIntervalSince(start) / 3600)
-    }
+    // MARK: - Stats Data
 
-    private var wsEarnings: Double {
-        wsHours * (Double(wsRate) ?? 0)
-    }
-
+    // Builds work statistics from the currently filtered sessions.
     private var currentStats: WorkStats {
-        makeStats(from: filteredSessions)
+        makeStats(from: currentSessions)
     }
 
+    // Label for the selected current period.
+    private var currentLabel: String {
+        periodMode == .yearly ? "\(selectedYear)" : "\(monthNames[selectedMonth]) \(selectedYear)"
+    }
+
+    // Label for the previous comparison period.
     private var previousLabel: String {
         let previous = previousPeriod()
         return periodLabel(mode: previous.mode, month: previous.month, year: previous.year)
     }
 
-    private var currentLabel: String {
-        periodLabel(mode: periodMode, month: selectedMonth, year: selectedYear)
+    // Year options shown in the year picker.
+    private var availableYears: [Int] {
+        let current = Calendar.current.component(.year, from: Date())
+        return Array((current - 5)...(current + 5))
     }
 
+    // MARK: - Live Work Session Calculations
+
+    // Calculates hours from the work session form before saving.
+    private var wsHours: Double {
+        let start = mergedDate(date: wsDate, time: wsStart)
+        let rawEnd = mergedDate(date: wsDate, time: wsEnd)
+        let end = adjustedEndDate(start: start, end: rawEnd)
+
+        return max(0, end.timeIntervalSince(start) / 3600)
+    }
+
+    // Calculates earnings from current form hours and hourly rate.
+    private var wsEarnings: Double {
+        let rate = Double(wsRate) ?? 0
+        return wsHours * rate
+    }
+
+    // MARK: - Add Work Session
+
+    // Validates and saves a new work session through AppStore.
     private func addWorkSession() {
         let rate = Double(wsRate) ?? 0
         let start = mergedDate(date: wsDate, time: wsStart)
@@ -578,7 +732,10 @@ struct WorkHoursView: View {
         let end = adjustedEndDate(start: start, end: rawEnd)
 
         let hours = max(0, end.timeIntervalSince(start) / 3600)
-        guard hours > 0 else { return }
+
+        guard hours > 0 else {
+            return
+        }
 
         let entry = WorkSessionRecord(
             date: wsDate,
@@ -596,8 +753,13 @@ struct WorkHoursView: View {
         wsEnd = Calendar.current.date(byAdding: .hour, value: 1, to: Date()) ?? Date()
     }
 
+    // MARK: - Add Expense
+
+    // Validates and saves a new expense through AppStore.
     private func addExpense() {
-        guard let amount = Double(exAmount), amount > 0 else { return }
+        guard let amount = Double(exAmount), amount > 0 else {
+            return
+        }
 
         let cleanName = exName.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanWhere = exWhere.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -618,6 +780,9 @@ struct WorkHoursView: View {
         exType = .food
     }
 
+    // MARK: - Period Helpers
+
+    // Checks whether a date belongs to the selected month or year.
     private func isInSelectedPeriod(_ date: Date) -> Bool {
         let y = Calendar.current.component(.year, from: date)
         let m = Calendar.current.component(.month, from: date) - 1
@@ -629,6 +794,7 @@ struct WorkHoursView: View {
         return y == selectedYear && m == selectedMonth
     }
 
+    // Returns the previous period used for comparison labels.
     private func previousPeriod() -> (mode: PeriodMode, month: Int, year: Int) {
         if periodMode == .yearly {
             return (.yearly, selectedMonth, selectedYear - 1)
@@ -641,10 +807,14 @@ struct WorkHoursView: View {
         return (.monthly, selectedMonth - 1, selectedYear)
     }
 
+    // Creates a readable label for a month or year period.
     private func periodLabel(mode: PeriodMode, month: Int, year: Int) -> String {
         mode == .yearly ? "\(year)" : "\(monthNames[month]) \(year)"
     }
 
+    // MARK: - Stats Builder
+
+    // Calculates total hours, earnings, sessions, averages, and busiest day.
     private func makeStats(from source: [WorkSessionRecord]) -> WorkStats {
         let totalHours = source.reduce(0) { $0 + $1.hours }
         let totalEarnings = source.reduce(0) { $0 + $1.earnings }
@@ -676,6 +846,9 @@ struct WorkHoursView: View {
         )
     }
 
+    // MARK: - Date Helpers
+
+    // Combines a selected date with a selected time.
     private func mergedDate(date: Date, time: Date) -> Date {
         let d = Calendar.current.dateComponents([.year, .month, .day], from: date)
         let t = Calendar.current.dateComponents([.hour, .minute], from: time)
@@ -690,31 +863,43 @@ struct WorkHoursView: View {
         return Calendar.current.date(from: comps) ?? date
     }
 
+    // Allows overnight shifts by moving the end time to the next day when needed.
     private func adjustedEndDate(start: Date, end: Date) -> Date {
-        if end >= start { return end }
+        if end >= start {
+            return end
+        }
+
         return Calendar.current.date(byAdding: .day, value: 1, to: end) ?? end
     }
 
+    // MARK: - Formatting Helpers
+
+    // Formats a date without time.
     private func formatDate(_ date: Date) -> String {
         date.formatted(date: .abbreviated, time: .omitted)
     }
 
+    // Returns the full weekday name for a date.
     private func weekdayName(_ date: Date) -> String {
         date.formatted(.dateTime.weekday(.wide))
     }
 
+    // Formats only the time from a date.
     private func formatTime(_ date: Date) -> String {
         date.formatted(date: .omitted, time: .shortened)
     }
 
+    // Formats a value as money.
     private func money(_ value: Double) -> String {
         String(format: "$%.2f", value)
     }
 
+    // Formats hours with one decimal place.
     private func hoursText(_ value: Double) -> String {
         "\(String(format: "%.1f", value))h"
     }
 
+    // Formats hours with two decimal places for detailed records.
     private func shortHours(_ value: Double) -> String {
         "\(String(format: "%.2f", value))h"
     }

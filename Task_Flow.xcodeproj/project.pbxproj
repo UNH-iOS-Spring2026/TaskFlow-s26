@@ -12,43 +12,14 @@
 		E95FEEFD2F8DEBE6008F460B /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = E95FEEFC2F8DEBE6008F460B /* FirebaseFirestore */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXContainerItemProxy section */
-		E9B657E32F3D5DAF005EC916 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = E9B657CD2F3D5DAE005EC916 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = E9B657D42F3D5DAE005EC916;
-			remoteInfo = Task_Flow;
-		};
-		E9B657ED2F3D5DAF005EC916 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = E9B657CD2F3D5DAE005EC916 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = E9B657D42F3D5DAE005EC916;
-			remoteInfo = Task_Flow;
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXFileReference section */
 		E9B657D52F3D5DAE005EC916 /* Task_Flow.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Task_Flow.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		E9B657E22F3D5DAF005EC916 /* Task_FlowTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = Task_FlowTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		E9B657EC2F3D5DAF005EC916 /* Task_FlowUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = Task_FlowUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		E9B657D72F3D5DAE005EC916 /* Task_Flow */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Task_Flow;
-			sourceTree = "<group>";
-		};
-		E9B657E52F3D5DAF005EC916 /* Task_FlowTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Task_FlowTests;
-			sourceTree = "<group>";
-		};
-		E9B657EF2F3D5DAF005EC916 /* Task_FlowUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Task_FlowUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -61,20 +32,6 @@
 				E95FEEF92F8DEBBF008F460B /* FirebaseCore in Frameworks */,
 				E95FEEFB2F8DEBD5008F460B /* FirebaseAuth in Frameworks */,
 				E95FEEFD2F8DEBE6008F460B /* FirebaseFirestore in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		E9B657DF2F3D5DAF005EC916 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		E9B657E92F3D5DAF005EC916 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -92,8 +49,6 @@
 			isa = PBXGroup;
 			children = (
 				E9B657D72F3D5DAE005EC916 /* Task_Flow */,
-				E9B657E52F3D5DAF005EC916 /* Task_FlowTests */,
-				E9B657EF2F3D5DAF005EC916 /* Task_FlowUITests */,
 				E95FEEF62F8DEA76008F460B /* Frameworks */,
 				E9B657D62F3D5DAE005EC916 /* Products */,
 			);
@@ -103,8 +58,6 @@
 			isa = PBXGroup;
 			children = (
 				E9B657D52F3D5DAE005EC916 /* Task_Flow.app */,
-				E9B657E22F3D5DAF005EC916 /* Task_FlowTests.xctest */,
-				E9B657EC2F3D5DAF005EC916 /* Task_FlowUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -137,52 +90,6 @@
 			productReference = E9B657D52F3D5DAE005EC916 /* Task_Flow.app */;
 			productType = "com.apple.product-type.application";
 		};
-		E9B657E12F3D5DAF005EC916 /* Task_FlowTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = E9B657F92F3D5DAF005EC916 /* Build configuration list for PBXNativeTarget "Task_FlowTests" */;
-			buildPhases = (
-				E9B657DE2F3D5DAF005EC916 /* Sources */,
-				E9B657DF2F3D5DAF005EC916 /* Frameworks */,
-				E9B657E02F3D5DAF005EC916 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				E9B657E42F3D5DAF005EC916 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				E9B657E52F3D5DAF005EC916 /* Task_FlowTests */,
-			);
-			name = Task_FlowTests;
-			packageProductDependencies = (
-			);
-			productName = Task_FlowTests;
-			productReference = E9B657E22F3D5DAF005EC916 /* Task_FlowTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
-		E9B657EB2F3D5DAF005EC916 /* Task_FlowUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = E9B657FC2F3D5DAF005EC916 /* Build configuration list for PBXNativeTarget "Task_FlowUITests" */;
-			buildPhases = (
-				E9B657E82F3D5DAF005EC916 /* Sources */,
-				E9B657E92F3D5DAF005EC916 /* Frameworks */,
-				E9B657EA2F3D5DAF005EC916 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				E9B657EE2F3D5DAF005EC916 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				E9B657EF2F3D5DAF005EC916 /* Task_FlowUITests */,
-			);
-			name = Task_FlowUITests;
-			packageProductDependencies = (
-			);
-			productName = Task_FlowUITests;
-			productReference = E9B657EC2F3D5DAF005EC916 /* Task_FlowUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -195,14 +102,6 @@
 				TargetAttributes = {
 					E9B657D42F3D5DAE005EC916 = {
 						CreatedOnToolsVersion = 26.2;
-					};
-					E9B657E12F3D5DAF005EC916 = {
-						CreatedOnToolsVersion = 26.2;
-						TestTargetID = E9B657D42F3D5DAE005EC916;
-					};
-					E9B657EB2F3D5DAF005EC916 = {
-						CreatedOnToolsVersion = 26.2;
-						TestTargetID = E9B657D42F3D5DAE005EC916;
 					};
 				};
 			};
@@ -224,28 +123,12 @@
 			projectRoot = "";
 			targets = (
 				E9B657D42F3D5DAE005EC916 /* Task_Flow */,
-				E9B657E12F3D5DAF005EC916 /* Task_FlowTests */,
-				E9B657EB2F3D5DAF005EC916 /* Task_FlowUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		E9B657D32F3D5DAE005EC916 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		E9B657E02F3D5DAF005EC916 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		E9B657EA2F3D5DAF005EC916 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -262,34 +145,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		E9B657DE2F3D5DAF005EC916 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		E9B657E82F3D5DAF005EC916 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXTargetDependency section */
-		E9B657E42F3D5DAF005EC916 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = E9B657D42F3D5DAE005EC916 /* Task_Flow */;
-			targetProxy = E9B657E32F3D5DAF005EC916 /* PBXContainerItemProxy */;
-		};
-		E9B657EE2F3D5DAF005EC916 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = E9B657D42F3D5DAE005EC916 /* Task_Flow */;
-			targetProxy = E9B657ED2F3D5DAF005EC916 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		E9B657F42F3D5DAF005EC916 /* Debug */ = {
@@ -344,7 +200,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -401,7 +257,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -418,9 +274,9 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = LY5D625297;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Task Flow uses Face ID to unlock your account securely.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -450,9 +306,9 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = LY5D625297;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Task Flow uses Face ID to unlock your account securely.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -475,86 +331,6 @@
 			};
 			name = Release;
 		};
-		E9B657FA2F3D5DAF005EC916 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.aravind.Task-FlowTests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Task_Flow.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Task_Flow";
-			};
-			name = Debug;
-		};
-		E9B657FB2F3D5DAF005EC916 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.aravind.Task-FlowTests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Task_Flow.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Task_Flow";
-			};
-			name = Release;
-		};
-		E9B657FD2F3D5DAF005EC916 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.aravind.Task-FlowUITests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = Task_Flow;
-			};
-			name = Debug;
-		};
-		E9B657FE2F3D5DAF005EC916 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.aravind.Task-FlowUITests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = Task_Flow;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -572,24 +348,6 @@
 			buildConfigurations = (
 				E9B657F72F3D5DAF005EC916 /* Debug */,
 				E9B657F82F3D5DAF005EC916 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		E9B657F92F3D5DAF005EC916 /* Build configuration list for PBXNativeTarget "Task_FlowTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				E9B657FA2F3D5DAF005EC916 /* Debug */,
-				E9B657FB2F3D5DAF005EC916 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		E9B657FC2F3D5DAF005EC916 /* Build configuration list for PBXNativeTarget "Task_FlowUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				E9B657FD2F3D5DAF005EC916 /* Debug */,
-				E9B657FE2F3D5DAF005EC916 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
